@@ -1,11 +1,5 @@
 #include "mpu_setup.h"
 
-#include "mpu_setup.h"  // include its own header
-#include <Adafruit_MPU6050.h>
-#include <Adafruit_Sensor.h>
-#include <Wire.h>
-
-
 void setupMPU(Adafruit_MPU6050 &mpu) {
     if (!mpu.begin()) {
       Serial.println("Failed to find MPU6050 chip");
@@ -32,22 +26,20 @@ void setupMPU(Adafruit_MPU6050 &mpu) {
   }
 
 
-String createPayload(Adafruit_MPU6050 &mpu) {
-  // get new sensor events
-  sensors_event_t a, g, temp;
-  mpu.getEvent(&a, &g, &temp);
+void readIMUData(Adafruit_MPU6050 &mpu, CoreData &data) {
+    // 1. Read MPU data
+    sensors_event_t a, g, temp;
+    mpu.getEvent(&a, &g, &temp);
 
-  // create payload
-  String payload = "{";
-  payload += "\"accel_x\":" + String(a.acceleration.x, 2) + ",";
-  payload += "\"accel_y\":" + String(a.acceleration.y, 2) + ",";
-  payload += "\"accel_z\":" + String(a.acceleration.z, 2) + ",";
-  payload += "\"gyro_x\":" + String(g.gyro.x, 2) + ",";
-  payload += "\"gyro_y\":" + String(g.gyro.y, 2) + ",";
-  payload += "\"gyro_z\":" + String(g.gyro.z, 2);
-  payload += "}";
+    // 2. Modify the referenced 'data' object directly
+    data.accelX = a.acceleration.x;
+    data.accelY = a.acceleration.y;
+    data.accelZ = a.acceleration.z;
 
-  return payload;
+    data.gyroX = g.gyro.x;
+    data.gyroY = g.gyro.y;
+    data.gyroZ = g.gyro.z;
+    
 }
 
 

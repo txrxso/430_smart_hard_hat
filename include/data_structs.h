@@ -47,4 +47,14 @@ struct NoiseData {
 };
 
 
+const CoreData EMPTY_COREDATA = {
+    0.0, 0.0, 0.0,  // accelX, accelY, accelZ
+    0.0, 0.0, 0.0,  // gyroX, gyroY, gyroZ
+    0.0, 0.0, 0.0,  // latitude, longitude, altitude
+    0.0,            // hdop
+    0,              // satellites
+    "",             // dateTime
+    ""              // eventType
+};
+
 #endif

@@ -1,7 +1,4 @@
 // IMU (MPU6050)
-#include <Adafruit_MPU6050.h>
-#include <Adafruit_Sensor.h>
-#include <Wire.h>
 # include <mpu_setup.h>
 
 // MQTT
@@ -14,6 +11,13 @@
 #include <TinyGPS++.h>
 #include "gps_config.h"
 
+// CAN
+#include "can.h"
+
+#include <data_structs.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
 
 // define DEBUG mode to print stuff
 #define DEBUG_MODE 1 
@@ -29,86 +33,15 @@ TinyGPSPlus gps;
 HardwareSerial gpsSerial(2);
 
 
+// shared sensor data
+static CoreData sharedData;
+static SemaphoreHandle_t dataMutex = NULL;
 
-// structure to hold IMU and GPS data
-struct SensorData { 
-  // IMU data
-  float accelX;
-  float accelY;
-  float accelZ;
-  float gyroX;
-  float gyroY;
-  float gyroZ;
+TaskHandle_t mqttTaskHandle = NULL;
+TaskHandle_t pollTaskHandle = NULL;
+TaskHandle_t canTaskHandle = NULL;
 
-  // GPS data
-  double latitude;
-  double longitude;
-  double altitude; // in meters
-  // parameters below are sent as a quality check
-  float hdop; // horizontal dilution of precision (lower maeans better accuracy)
-  int satellites; // number of satellites in view ()
-  String dateTime; // date and time as string
-};
-
-struct PeripheralData {
-  // meant for sensor data received via CAN (noise, PM sensors, and other air quality sensors)
-  float pm2_5;
-  float pm10;
-  
-};
-
-
-void readIMUData(SensorData &data) {
-  sensors_event_t a, g, temp;
-  mpu.getEvent(&a, &g, &temp);
-
-  data.accelX = a.acceleration.x;
-  data.accelY = a.acceleration.y;
-  data.accelZ = a.acceleration.z;
-
-  data.gyroX = g.gyro.x;
-  data.gyroY = g.gyro.y;
-  data.gyroZ = g.gyro.z;
-}
-
-bool readGPSData(SensorData &data) {
-  unsigned long start = millis();
-  bool gpsUpdated = false;
-
-  while (millis() - start < 1000) {
-    while (gpsSerial.available() > 0) {
-      gps.encode(gpsSerial.read());
-    }
-    if (gps.location.isUpdated()) {
-      gpsUpdated = true;
-
-      // update sensor data
-      data.latitude = gps.location.lat();
-      data.longitude = gps.location.lng();
-      data.altitude = gps.altitude.meters();
-      data.hdop = gps.hdop.value() / 100.0;
-      data.satellites = gps.satellites.value();
-
-      if (gps.date.isValid() && gps.time.isValid()) {
-        data.dateTime = String(gps.date.year()) + "/" + 
-                       String(gps.date.month()) + "/" + 
-                       String(gps.date.day()) + "," + 
-                       String(gps.time.hour()) + ":" + 
-                       String(gps.time.minute()) + ":" + 
-                       String(gps.time.second());
-      } 
-      
-      else {
-        data.dateTime = "Invalid";
-      }
-    }
-  }
-
-  return gpsUpdated;
-}
-
-
-String createCombinedPayload(const SensorData &data) {
+String createCombinedPayload(const CoreData &data) {
   String payload = "{";
 
   // IMU data
@@ -131,6 +64,40 @@ String createCombinedPayload(const SensorData &data) {
 
   return payload;
 } 
+
+
+bool readGPSData(CoreData &data) {
+  bool gpsUpdated = false;
+
+  while (gpsSerial.available() > 0) {
+    gps.encode(gpsSerial.read());
+  }
+    
+  if (gps.location.isUpdated()) {
+    gpsUpdated = true;
+
+    // update sensor data
+    data.latitude = gps.location.lat();
+    data.longitude = gps.location.lng();
+    data.altitude = gps.altitude.meters();
+    data.hdop = gps.hdop.value() / 100.0;
+    data.satellites = gps.satellites.value();
+
+    if (gps.date.isValid() && gps.time.isValid()) {
+      data.dateTime = String(gps.date.year()) + "/" + 
+                      String(gps.date.month()) + "/" + 
+                      String(gps.date.day()) + "," + 
+                      String(gps.time.hour()) + ":" + 
+                      String(gps.time.minute()) + ":" + 
+                      String(gps.time.second());
+    } 
+    
+    else {
+      data.dateTime = "Invalid";
+    }
+  }
+  return gpsUpdated;
+}
 
 
 void connectToMQTT() {
@@ -179,6 +146,107 @@ void connectToMQTT() {
 
 }
 
+// ===============================================================================
+// Tasks - FreeRTOS
+// ===============================================================================
+
+void vTaskMqttTransmit(void *pvParameters) {
+  const TickType_t xDelay = pdMS_TO_TICKS(100); // 100 ms delay
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
+  for(;;) {
+
+    if (!mqttClient.connected()) {
+      connectToMQTT();
+    } 
+    else {
+      mqttClient.loop(); // maintain connection
+    }
+
+    // start with empty snapshot
+    CoreData snapshot = EMPTY_COREDATA; 
+
+    // attempt to take mutex and wait for max of 10 ticks to snapshot shared data
+    if (dataMutex != NULL && xSemaphoreTake(dataMutex, (TickType_t)10) == pdTRUE) { 
+      snapshot = sharedData;
+      xSemaphoreGive(dataMutex);
+    }
+
+    // build and publish payload
+    String payload = createCombinedPayload(snapshot);
+    if (mqttClient.connected()) { 
+      bool success = mqttClient.publish(MQTT_TOPIC_TEST, payload.c_str()); 
+
+      if (success) {
+        Serial.println("Message published successfully");
+      }
+      else {
+        Serial.println("Publish failed!");
+      }
+
+    }
+
+    vTaskDelayUntil(&xLastWakeTime, xDelay);
+
+  }
+
+}
+
+
+void vTaskCanRx(void *pvParameters) {
+  for(;;) {
+    twai_message_t msg;
+    esp_err_t status = twai_receive(&msg, pdMS_TO_TICKS(100)); // 100 ms wait
+
+    if (status == ESP_OK) {
+      // Message received — print details
+      Serial.println("TWAI: Message received");
+      Serial.print("ID: "); Serial.println(msg.identifier);
+      Serial.print("Extended format: "); Serial.println(msg.extd ? "yes" : "no");
+      Serial.print("RTR: "); Serial.println(msg.rtr ? "yes" : "no");
+      Serial.print("DLC: "); Serial.println(msg.data_length_code);
+
+      if (!(msg.rtr)) {
+        for (int i = 0; i < msg.data_length_code; i++) {
+          Serial.print("  data["); Serial.print(i); Serial.print("] = ");
+          Serial.println(msg.data[i]);
+        }
+      }
+    }
+
+    else {
+      Serial.println("TWAI: No message received within timeout period");
+      vTaskDelay(pdMS_TO_TICKS(10)); // wait before next poll
+    }
+
+}}
+
+// polls IMU and GPS and writes to sharedData
+void vTaskPoll(void *pvParameters) {
+  const TickType_t xDelay = pdMS_TO_TICKS(100);
+  for(;;) {
+
+    CoreData core_data;
+
+    // read IMU data
+    readIMUData(mpu, core_data);
+    Serial.println("IMU data read");
+
+    // read GPS data
+    bool gpsUpdated = readGPSData(core_data);
+
+    // publish into sharedData using mutx 
+    if (dataMutex != NULL && xSemaphoreTake(dataMutex, (TickType_t)10) == pdTRUE) { 
+      sharedData = core_data;
+      xSemaphoreGive(dataMutex);
+    }
+
+    vTaskDelay(xDelay);
+
+  }
+
+}
+
 void setup(void) {
   Serial.begin(115200);
   while (!Serial)
@@ -188,11 +256,12 @@ void setup(void) {
 
   gpsSerial.begin(GPS_BAUD, SERIAL_8N1, RXD2, TXD2);
 
+  setupCAN();
+
   // setup wifi as client
   WiFi.mode(WIFI_STA);
   connectToWifi(); // use this for home network but not for WPA-2 Enterprise
   //connectToWifiEnterprise();
-
 
   // set up mqtt 
   mqttClient.setBufferSize(512);
@@ -200,84 +269,22 @@ void setup(void) {
 
   connectToMQTT();
 
+  // create mutex and tasks
+  dataMutex = xSemaphoreCreateMutex();
+
+  if (dataMutex == NULL) {
+    Serial.println("ERROR: failed to create data mutex");
+  } else {
+    // initialize snapshot
+    memset(&sharedData, 0, sizeof(sharedData));
+  }
+
+  xTaskCreatePinnedToCore(vTaskMqttTransmit, "MQTT_Transmit", 8192, NULL, 1, NULL, 1);
+  xTaskCreatePinnedToCore(vTaskPoll, "Poll_Sensors", 8192, NULL, 1, NULL, 1);
+  xTaskCreatePinnedToCore(vTaskCanRx, "CAN_Rx", 2048, NULL, 1, NULL, 1);
+
 }
 
 void loop() {
-  // handle mqtt keep alive + maintaining connection
-  mqttClient.loop();
-
-  SensorData sensorData;
-  
-  // read IMU data 
-  readIMUData(sensorData);
-
-  // read and process GPS data 
-  readGPSData(sensorData);
-
-  String payload = createCombinedPayload(sensorData);
-
-  // print debug info
-  if (DEBUG_MODE == 1) {
-    Serial.println(payload.length());
-    Serial.println("IMU Data:");
-    Serial.print("Accel X: "); Serial.print(sensorData.accelX); Serial.print(" m/s^2, ");
-    Serial.print("Accel Y: "); Serial.print(sensorData.accelY); Serial.print(" m/s^2, ");
-    Serial.print("Accel Z: "); Serial.print(sensorData.accelZ); Serial.println(" m/s^2");
-
-    Serial.print("Gyro X: "); Serial.print(sensorData.gyroX); Serial.print(" rad/s, ");
-    Serial.print("Gyro Y: "); Serial.print(sensorData.gyroY); Serial.print(" rad/s, ");
-    Serial.print("Gyro Z: "); Serial.print(sensorData.gyroZ); Serial.println(" rad/s");
-    Serial.println();
-
-    Serial.println("GPS Data:");
-    Serial.print("Latitude: "); Serial.print(sensorData.latitude, 6); Serial.print(", ");
-    Serial.print("Longitude: "); Serial.print(sensorData.longitude, 6); Serial.print(", ");
-    Serial.print("Altitude: "); Serial.print(sensorData.altitude); Serial.println(" m");
-    Serial.print("HDOP: "); Serial.print(sensorData.hdop); Serial.print(", ");
-    Serial.print("Satellites: "); Serial.println(sensorData.satellites);
-  }
-
-  unsigned long start = millis();
-
-  while (millis() - start < 1000) {
-    while (gpsSerial.available() > 0) {
-      gps.encode(gpsSerial.read());
-    }
-    if (gps.location.isUpdated()) {
-      Serial.print("LAT: ");
-      Serial.println(gps.location.lat(), 6);
-      Serial.print("LONG: "); 
-      Serial.println(gps.location.lng(), 6);
-      Serial.print("SPEED (km/h) = "); 
-      Serial.println(gps.speed.kmph()); 
-      Serial.print("ALT (min)= "); 
-      Serial.println(gps.altitude.meters());
-      Serial.print("HDOP = "); 
-      Serial.println(gps.hdop.value() / 100.0); 
-      Serial.print("Satellites = "); 
-      Serial.println(gps.satellites.value()); 
-      Serial.print("Time in UTC: ");
-      Serial.println(String(gps.date.year()) + "/" + String(gps.date.month()) + "/" + String(gps.date.day()) + "," + String(gps.time.hour()) + ":" + String(gps.time.minute()) + ":" + String(gps.time.second()));
-      Serial.println("");
-    }
-  }
-
-  // check mqtt connection
-  if (!mqttClient.connected()) {
-    Serial.println("Lost connection");
-    connectToMQTT();
-  }
-
-  // publish 
-  bool success = mqttClient.publish(MQTT_TOPIC_TEST, payload.c_str()); 
-
-  if (success) {
-    Serial.println("Message published successfully");
-  }
-  else {
-    Serial.println("Publish failed!");
-  }
-
-  delay(2000);
-
+  // Empty. Tasks are running independently.
 }
