@@ -1,5 +1,15 @@
 # 430_gateway_node
 
+## Parameters to change for compilation
+In `main.cpp`: 
+1. Change DEBUG_MODE to 0 to compile without extra `Serial.println()` debug statements.
+2. Change `HEARTBEAT_INTERVAL_MIN` to the desired value in minutes. 
+
+```
+// define DEBUG mode to print stuff
+#define DEBUG_MODE 1 
+#define HEARTBEAT_INTERVAL_MIN 5 // in minutes
+```
 
 ## Add Required Wifi Credentials
 
