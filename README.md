@@ -31,3 +31,6 @@ In `main.cpp`:
 
 #endif 
 ```
+## To run native tests
+Ensure that:
+1) `gcc --version` returns some version from CMD. Otherwise, follow: https://code.visualstudio.com/docs/cpp/config-mingw to add MinGW-w64 `bin` to the `PATH` environment variable. 
