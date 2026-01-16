@@ -5,6 +5,7 @@
 #include <driver/twai.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
+#include "data.h"
 
 // CAN pins 
 #define CAN_TX_PIN 5
@@ -19,10 +20,16 @@ extern EventGroupHandle_t mqttPublishEventGroup;
 #define PUBLISH_HEARTBEAT_BIT (1 << 4)
 
 bool initCAN();
-bool sendCANMessage(const twai_message_t& message, int maxRetries = 3);
-void handleAlertNotification(const twai_message_t& msg, QueueHandle_t alertQueue, QueueHandle_t gpsQueue, EventGroupHandle_t mqttEventGroup);
-void handleAlertCleared(const twai_message_t& msg, QueueHandle_t canOutgoingQueue); 
-void handleHeartbeatResponse(const twai_message_t& msg, QueueHandle_t heartbeatQueue, QueueHandle_t gpsQueue, EventGroupHandle_t mqttEventGroup);
+uint32_t buildCANID(CANPriority priority, CANMessageType type, NodeID nodeid);
+CANPriority getPriorityFromID(uint32_t canID);
+CANMessageType getMessageTypeFromID(uint32_t canID);
+NodeID getNodeIDFromID(uint32_t canID);
+
+void sendHeartbeatRequest();
+
+// void handleAlertNotification(const twai_message_t& msg, QueueHandle_t alertQueue, QueueHandle_t gpsQueue, EventGroupHandle_t mqttEventGroup);
+// void handleAlertCleared(const twai_message_t& msg, QueueHandle_t canOutgoingQueue); 
+// void handleHeartbeatResponse(const twai_message_t& msg, QueueHandle_t heartbeatQueue, QueueHandle_t gpsQueue, EventGroupHandle_t mqttEventGroup);
 // void aggregateAllHeartbeatData(QueueHandle_t heartbeatQueue);
 
 #endif 
