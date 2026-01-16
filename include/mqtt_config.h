@@ -13,6 +13,8 @@ const char* MQTT_PSWD = "Smarthardhat0";
 const int MQTT_PORT_HIVEMQ = 8883; 
 const int MQTT_PORT_MOSQUITTO = 1883; 
 const char* MQTT_TOPIC_TEST = "20251122_YVR/workerA/mpu6050/";
+const char* MQTT_TOPIC_ALERTS = "igen430/shh/alerts/workerA";
+const char* MQTT_TOPIC_HEARTBEATS = "igen430/shh/heartbeats/workerA";
 const unsigned long PUBLISH_INTERVAL = 500;
 const unsigned long RECONNECT_INTERVAL = 2000;
 
