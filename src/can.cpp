@@ -1,7 +1,6 @@
 #include "can.h"
 #include "data.h"
 
-#define CAN_DEBUG 1
 
 bool initCAN() { 
   // get back to clean state before trying
@@ -83,6 +82,16 @@ void sendHeartbeatRequest() {
 
 }
 
+void handleHeartbeatResponse(const twai_message_t& msg, 
+    QueueHandle_t heartbeatQueue, QueueHandle_t gpsQueue, 
+    EventGroupHandle_t mqttEventGroup) {
+
+    // create empty heartbeat payload
+    hbPayload payload = {};
+    
+
+
+}
 
 // void handleAlertNotification(const twai_message_t& msg, QueueHandle_t alertQueue, QueueHandle_t gpsQueue) {
 //     // send ACK to peripheral module 

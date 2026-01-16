@@ -86,45 +86,18 @@ bool connectToMQTT() {
 }
 
 
-// =======================================
-// TO DO TASKS
-// =======================================
-// TASK: Heartbeat Message Aggregation and Sending
-void heartbeatTask(void * parameter) {
+// TASK: just sends requests for heartbeat data based on timer
+// DOES NOT WAIT FOR RESPONSES
+void heartbeatRequestTask(void * parameter) {
   TickType_t prevWakeTime = xTaskGetTickCount(); // keep track of time to use for next wake up for interval 
   const TickType_t heartbeatInterval = pdMS_TO_TICKS(HEARTBEAT_INTERVAL_MIN * 60 * 1000);
-  const TickType_t requestTimeout = pdMS_TO_TICKS(2000); // 2 seconds to wait for responses
 
   while (true) {
     // send RTR for heartbeat data via CAN
-    twai_message_t rtr_msg;
-    rtr_msg.identifier = HEARTBEAT_REQUEST;
-    rtr_msg.extd = 0; // standard frame
-    rtr_msg.rtr = 1; // remote frame request
-    rtr_msg.data_length_code = 5; // size of message expect to receive in response - TEMPORARY: put 5 bytes for now
+    sendHeartbeatRequest();
 
-    #if DEBUG_MODE
-    Serial.println("Sending HEARTBEAT_REQUEST via CAN.");
-    #endif
-    if (sendCANMessage(rtr_msg)) {
-      #if DEBUG_MODE
-      Serial.println("HEARTBEAT_REQUEST sent successfully.");
-      #endif
-      vTaskDelay(requestTimeout); // wait for responses to come in
-
-      // TO DO: 
-      // aggregate data from responses 
-      // format into HeartPayload then push to heartbeatPublishQueue for mqtt publish task
-
-      // signal mqtt publish task via event group
-      xEventGroupSetBits(mqttPublishEventGroup, PUBLISH_HEARTBEAT_BIT);
-      vTaskDelayUntil(&prevWakeTime, heartbeatInterval);
-
-    } else {
-      #if DEBUG_MODE
-      Serial.println("Failed to send HEARTBEAT_REQUEST.");
-      #endif
-    }
+    // wait for next interval to request again
+    vTaskDelayUntil(&prevWakeTime, heartbeatInterval);
 
   }
 
@@ -133,7 +106,8 @@ void heartbeatTask(void * parameter) {
 
 
 // TASK: Incoming CAN Message Monitoring and Handling 
-void canTask(void * parameter) {
+// (centralized handler for all incoming CAN messages, including heartbeat RTR responses)
+void incomingCanTask(void * parameter) {
   twai_message_t incoming_msg; 
 
   while (true) {
@@ -142,29 +116,37 @@ void canTask(void * parameter) {
 
     if (status == ESP_OK) {
       // process incoming message 
-      #if DEBUG_MODE
-      Serial.println("Received CAN message from ID:");
-      Serial.println(incoming_msg.identifier, HEX);
+      #if CAN_DEBUG
+      CANMessageType msgType = getMessageTypeFromID(incoming_msg.identifier);
+      NodeID nodeId = getNodeIDFromID(incoming_msg.identifier);
+      Serial.printf("Received CAN msg. Type: 0x%02X from Node ID: 0x%02X\n", msgType, nodeId);
       #endif
 
       // handle the message based on type of CAN message
       switch (incoming_msg.identifier) {
         case ALERT_NOTIFICATION:
-          handleAlertNotification(incoming_msg, alertPublishQueue, gpsQueue, mqttPublishEventGroup);
+          // parse CAN data and populate AlertPayload and send to alertPublishQueue for MQTT task 
           break;
+
+        case HEARTBEAT_RESPONSE: 
+          break; 
+
+        case ALERT_CLEARED_ACK:
+          break;
+
       }
 
 
     }
 
     else if (status == ESP_ERR_TIMEOUT) {
-      #if DEBUG_MODE
+      #if CAN_DEBUG
       Serial.println("No CAN msg recv'd within timeout.");
       #endif 
     }
 
     else {
-      #if DEBUG_MODE 
+      #if CAN_DEBUG 
       Serial.println("Error recv. CAN msg.");
       Serial.println(status);
       #endif

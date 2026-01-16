@@ -64,7 +64,7 @@ enum CANPriority : uint8_t {
 };
 
 // types of messages that can be sent via CAN bus
-enum CANMessageType {
+enum CANMessageType : uint8_t {
   // HIGHEST PRIORITY 0x0- safety critical 
   // alerting lifecycle has two messages per alert: NOTIFICATION and CLEAR
   ALERT_NOTIFICATION = 0x01, // THRESHOLD EXCEEDED, NEEDS TO BE SENT IMMEDIATELY
@@ -121,6 +121,19 @@ struct AlertPayload {
   // key value pairs of measured values 
   KVPair measurements[5]; // max 5 measurements for now
 };
+
+
+// CAN frame structure for different nodes
+typedef struct {
+  uint16_t pm25_aqi;
+  uint16_t pm100_aqi;
+  uint16_t aqi_uba;
+  uint16_t reserved; // to make sure 8 bytes in data expected
+} __attribute__((packed)) airQualityHB_t;
+typedef struct {
+  uint16_t noise_db;
+  uint16_t reserved[3]; // to make sure 8 bytes in data expected
+} __attribute__((packed)) noiseHB_t;
 
 
 

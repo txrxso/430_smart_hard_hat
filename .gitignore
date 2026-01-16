@@ -12,3 +12,6 @@ lib/README
 
 # credentials
 include/secrets.h
+
+# test files (TEMPORARY)
+test/*

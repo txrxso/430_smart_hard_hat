@@ -69,15 +69,8 @@ bool serializeHB(const hbPayload& heartbeat, char* buffer, size_t bufferSize) {
     heartbeat.dateTime,
     heartbeat.resultant_acc,
     heartbeat.resultant_gyro,
-    heartbeat.pm10,
-    heartbeat.pm25,
-    heartbeat.pm100,
     heartbeat.aqi_pm25_us,
     heartbeat.aqi_pm100_us,
-    heartbeat.temperature,
-    heartbeat.humidity,
-    heartbeat.eco2,
-    heartbeat.tvoc,
     heartbeat.aqi);
 
   if (len >= bufferSize) return false;
