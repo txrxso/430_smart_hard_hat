@@ -56,7 +56,7 @@ bool serializeAP(const AlertPayload& alert, char* buffer, size_t bufferSize) {
 bool serializeHB(const hbPayload& heartbeat, char* buffer, size_t bufferSize) {
 
   int len = snprintf(buffer, bufferSize,
-    "{\"modulesOnline\":[%d,%d,%d],\"latitude\":%.6f,\"longitude\":%.6f,\"altitude\":%.2f,\"hdop\":%.2f,\"satellites\":%d,\"datetime\":\"%s\",\"resultant_acc\":%.2f,\"resultant_gyro\":%.2f,\"pm10\":%.2f,\"pm25\":%.2f,\"pm100\":%.2f,\"aqi_pm25_us\":%.2f,\"aqi_pm100_us\":%.2f,\"temperature\":%.2f,\"humidity\":%.2f,\"eco2\":%.2f,\"tvoc\":%.2f,\"aqi\":%.2f}",
+    "{\"modulesOnline\":[%d,%d,%d],\"latitude\":%.6f,\"longitude\":%.6f,\"altitude\":%.2f,\"hdop\":%.2f,\"satellites\":%d,\"datetime\":\"%s\",\"resultant_acc\":%.2f,\"resultant_gyro\":%.2f,\"aqi_pm25_us\":%.2f,\"aqi_pm100_us\":%.2f,\"aqi_uba\":%.2f}",
     // backend will handle modulesOnline and map to exactly what module is online using nodeID
     heartbeat.modulesOnline[0],
     heartbeat.modulesOnline[1],
@@ -71,8 +71,48 @@ bool serializeHB(const hbPayload& heartbeat, char* buffer, size_t bufferSize) {
     heartbeat.resultant_gyro,
     heartbeat.aqi_pm25_us,
     heartbeat.aqi_pm100_us,
-    heartbeat.aqi);
+    heartbeat.aqi_uba);
 
   if (len >= bufferSize) return false;
   return true;
+}
+
+
+bool isCollectionTimedOut(hbCollection& collection) {
+  if (!collection.isCollecting) {
+    return false; // not collecting, so cannot be timed out
+  }
+  bool timedOut = (xTaskGetTickCount() - collection.startTime) > pdMS_TO_TICKS(HEARTBEAT_RESPONSE_TIMEOUT_MS);
+
+  // change state if timed out
+  if (timedOut) {
+    collection.isCollecting = false;
+  }
+  return timedOut;
+}
+
+void aggHeartbeatResponse(NodeID nodeId, const twai_message_t& msg, hbCollection& collection) {
+
+  // parse CAN data based on node type 
+  if (nodeId == NODE_AIR_Q) {
+    airQualityHB_t* aqData = (airQualityHB_t*)msg.data;
+    collection.payload.aqi_pm25_us = static_cast<float>(aqData->pm25_aqi);
+    collection.payload.aqi_pm100_us = static_cast<float>(aqData->pm100_aqi);
+    collection.payload.aqi_uba = static_cast<float>(aqData->aqi_uba);
+
+  }
+  else if (nodeId == NODE_NOISE) {
+    noiseHB_t* noiseData = (noiseHB_t*)msg.data;
+    collection.payload.noise_db = static_cast<float>(noiseData->noise_db);
+
+  }
+
+  // add node id to online modules (ie. marked having responded)
+  for (int i = 0; i < MAX_NODES_RECV; i++) {
+    if (collection.payload.modulesOnline[i] == 0) {
+      collection.payload.modulesOnline[i] = static_cast<uint8_t>(nodeId);
+      break;
+    }
+
+  }
 }

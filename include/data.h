@@ -4,6 +4,7 @@
 // switch between ESP32 and native build
 #ifdef ARDUINO_ARCH_ESP32
   #include <Arduino.h>
+  #include <driver/twai.h>
 #else 
   #include <stdint.h>
   #include <stddef.h>
@@ -91,6 +92,8 @@ enum NodeID : uint8_t {
 };
 
 #define THIS_NODE GATEWAY_NODE
+#define MAX_NODES_RECV 2 
+#define HEARTBEAT_RESPONSE_TIMEOUT_MS 2000 // wait max 2 seconds for heartbeat response
 
 // types of alerts that can be sent to mqtt publish task 
 // (does not incl. periodic tasks like heartbeats)
@@ -136,11 +139,17 @@ typedef struct {
 } __attribute__((packed)) noiseHB_t;
 
 
+// tracking structure for collecting heartbeats (need to know state)
+struct hbCollection {
+    bool isCollecting; 
+    TickType_t startTime; 
+    hbPayload payload; // payload.modulesOnline gives array of NodeIDs that responded
+};
 
 // stuff for heartbeat payload for MQTT - keep everything as low memory as possible (e.g., double rather than float)
 struct hbPayload {
     // array of NodeIDs that responded
-    uint8_t modulesOnline[3] = {0}; // (0 = no module)
+    uint8_t modulesOnline[MAX_NODES_RECV] = {0}; // (0 = no module)
 
     // GPS data
     double latitude;
@@ -167,7 +176,7 @@ struct hbPayload {
     // float humidity;
     // float eco2; 
     // float tvoc;
-    float aqi;
+    float aqi_uba;
     // noise data 
     float noise_db; // in decibels
 };
@@ -177,6 +186,9 @@ struct hbPayload {
 const char* alertTypeToString(AlertType type);
 bool serializeAP(const AlertPayload& alert, char* buffer, size_t bufferSize);
 bool serializeHB(const hbPayload& heartbeat, char* buffer, size_t bufferSize);
+// helpers dealing with heartbeat collection state
+bool isCollectionTimedOut(hbCollection& collection);
+void aggHeartbeatResponse(NodeID nodeId, const twai_message_t& msg, hbCollection& collection);
 
 
 #endif
