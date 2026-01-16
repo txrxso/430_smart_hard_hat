@@ -24,6 +24,10 @@ SHOULD NEVER receive the following:
 - HEARTBEAT_REQUEST (this is an OUTGOING ONLY message from the gateway to peripheral modules)
 */
 
+// ======================
+// IMU and GPS
+// ======================
+
 // GPS data 
 struct gpsData {
   double latitude;
@@ -48,6 +52,17 @@ struct imuData {
   float resultant_gyro;
 };
 
+// ======================
+// CAN Message [11 bits : priority, message type, node] [8 bytes data] 
+// ======================
+
+// indicates priority for arbitration
+enum CANPriority : uint8_t {
+    SAFETY_ALERT    = 0, // threshold exceeded, etc.
+    CONTROL   = 1, // gateway commands, acks, etc.
+    HEARTBEAT = 2, // anything related to heartbeats 
+};
+
 // types of messages that can be sent via CAN bus
 enum CANMessageType {
   // HIGHEST PRIORITY 0x0- safety critical 
@@ -68,6 +83,7 @@ enum CANMessageType {
 
 };
 
+// indicates which node is sending the message
 enum NodeID : uint8_t { 
     GATEWAY_NODE = 0x01,
     NODE_NOISE = 0x02,
@@ -86,6 +102,9 @@ enum AlertType {
     MANUAL_CLEAR, // Button Press (HOLD FOR 3 SECONDS)
 };
 
+// ======================
+// MQTT 
+// ======================
 struct KVPair {
   char key[16];
   float value;
@@ -105,7 +124,7 @@ struct AlertPayload {
 
 
 
-// stuff for heartbeat payload - keep everything as low memory as possible (e.g., double rather than float)
+// stuff for heartbeat payload for MQTT - keep everything as low memory as possible (e.g., double rather than float)
 struct hbPayload {
     // array of NodeIDs that responded
     uint8_t modulesOnline[3] = {0}; // (0 = no module)
@@ -121,25 +140,23 @@ struct hbPayload {
     char dateTime[32];
     
     // IMU data 
-    double resultant_acc; // resultant acceleration
-    double resultant_gyro; // resultant gyroscope
+    float resultant_acc; // resultant acceleration
+    float resultant_gyro; // resultant gyroscope
 
     // air quality data from PM
-    double pm10;
-    double pm25;
-    double pm100;
-    double aqi_pm25_us;
-    double aqi_pm100_us;
-
+    // float pm10;
+    // float pm25;
+    // float pm100;
+    float aqi_pm25_us;
+    float aqi_pm100_us;
     // air quality data from ENS
-    double temperature; 
-    double humidity;
-    double eco2; 
-    double tvoc;
-    double aqi;
-
+    // float temperature; 
+    // float humidity;
+    // float eco2; 
+    // float tvoc;
+    float aqi;
     // noise data 
-    double noise_db; // in decibels
+    float noise_db; // in decibels
 };
 
 
