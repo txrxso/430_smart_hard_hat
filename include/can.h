@@ -29,11 +29,5 @@ CANMessageType getMessageTypeFromID(uint32_t canID);
 NodeID getNodeIDFromID(uint32_t canID);
 
 void sendHeartbeatRequest();
-void handleHeartbeatResponse(const twai_message_t& msg, QueueHandle_t heartbeatQueue, QueueHandle_t gpsQueue, EventGroupHandle_t mqttEventGroup);
-
-// void handleAlertNotification(const twai_message_t& msg, QueueHandle_t alertQueue, QueueHandle_t gpsQueue, EventGroupHandle_t mqttEventGroup);
-// void handleAlertCleared(const twai_message_t& msg, QueueHandle_t canOutgoingQueue); 
-// void handleHeartbeatResponse(const twai_message_t& msg, QueueHandle_t heartbeatQueue, QueueHandle_t gpsQueue, EventGroupHandle_t mqttEventGroup);
-// void aggregateAllHeartbeatData(QueueHandle_t heartbeatQueue);
 
 #endif 
