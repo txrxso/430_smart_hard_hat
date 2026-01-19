@@ -25,7 +25,7 @@
 
 // define DEBUG mode to print stuff
 #define DEBUG_MODE 1 
-#define HEARTBEAT_INTERVAL_MIN 5 // in minutes
+#define HEARTBEAT_INTERVAL_MIN 1 // set to 5 minutes // in minutes
 
 // for maintaining connection state
 WiFiClient wifiClient;
@@ -45,6 +45,11 @@ QueueHandle_t heartbeatPublishQueue; // MQTT publish heartbeat data
 QueueHandle_t canTxQueue; // outgoing CAN messages
 
 EventGroupHandle_t mqttPublishEventGroup = NULL;
+
+// global heartbeat collection state (shared bewteen tasks)
+hbCollection hbCollectState = {
+  .isCollecting = true
+}; // should start with isCollecting = false
 
 bool connectToMQTT() {
   #if DEBUG_MODE
@@ -93,8 +98,16 @@ void heartbeatRequestTask(void * parameter) {
   const TickType_t heartbeatInterval = pdMS_TO_TICKS(HEARTBEAT_INTERVAL_MIN * 60 * 1000);
 
   while (true) {
-    // send RTR for heartbeat data via CAN
-    sendHeartbeatRequest();
+    // only send if not currently collecting 
+    if (!hbCollectState.isCollecting) { 
+      // initialize hbCollection state
+      hbCollectState.startTime = xTaskGetTickCount();
+      memset(&hbCollectState.payload, 0, sizeof(hbPayload)); // zero everything
+
+      // send RTR for heartbeat data via CAN
+      sendHeartbeatRequest();
+
+    }
 
     // wait for next interval to request again
     vTaskDelayUntil(&prevWakeTime, heartbeatInterval);
@@ -116,24 +129,67 @@ void incomingCanTask(void * parameter) {
 
     if (status == ESP_OK) {
       // process incoming message 
-      #if CAN_DEBUG
       CANMessageType msgType = getMessageTypeFromID(incoming_msg.identifier);
       NodeID nodeId = getNodeIDFromID(incoming_msg.identifier);
+      #if CAN_DEBUG
       Serial.printf("Received CAN msg. Type: 0x%02X from Node ID: 0x%02X\n", msgType, nodeId);
       #endif
 
       // handle the message based on type of CAN message
-      switch (incoming_msg.identifier) {
-        case ALERT_NOTIFICATION:
-          // parse CAN data and populate AlertPayload and send to alertPublishQueue for MQTT task 
-          break;
+      if (msgType == HEARTBEAT_RESPONSE && !isCollectionTimedOut(hbCollectState)) {
+        // handle heartbeat response
+        aggHeartbeatResponse(nodeId, incoming_msg, hbCollectState);
 
-        case HEARTBEAT_RESPONSE: 
-          break; 
+        // add GPS values to heartbeat payload from gpsQueue only if not already set 
+        if (hbCollectState.payload.latitude == 0 && hbCollectState.payload.longitude == 0) {
+          // copy over data from gpsQueue if available
+          gpsData currGps; 
+          if (xQueuePeek(gpsQueue, &currGps, pdMS_TO_TICKS(10)) == pdTRUE) {
+            hbCollectState.payload.latitude = currGps.latitude;
+            hbCollectState.payload.longitude = currGps.longitude;
+            hbCollectState.payload.altitude = currGps.altitude;
+            hbCollectState.payload.hdop = currGps.hdop;
+            hbCollectState.payload.satellites = currGps.satellites;
+            strncpy(hbCollectState.payload.dateTime, currGps.dateTime, sizeof(hbCollectState.payload.dateTime));
+          }
+        } 
 
-        case ALERT_CLEARED_ACK:
-          break;
+        # if DEBUG_MODE
+        Serial.printf("Aggregated heartbeat response from Node ID: 0x%02X\n", nodeId);
+        #endif
+        
+      }
+      else if (msgType == ALERT_NOTIFICATION) {
+        // handle alert notification 
+        
+        // parse CAN message
 
+        // send an ACK back to peripheral module
+        twai_message_t ack_msg;
+        ack_msg.identifier = buildCANID(CONTROL, ALERT_ACK, GATEWAY_NODE);
+        ack_msg.extd = 0;
+        ack_msg.rtr = 0;
+        ack_msg.data_length_code = 1;
+        ack_msg.data[0] = 0x01; // simple ACK payload
+        twai_transmit(&ack_msg, pdMS_TO_TICKS(100));
+
+        // forward alert to mqttPublishTask via alertPublishQueue
+        // signal to event group
+        
+
+      }
+      else if (msgType == ALERT_CLEARED) {
+        // handle alert cleared 
+        // TO DO
+      }
+
+      // check again if heartbeat collection timed out -> need to signal to mqttPublishEventGroup
+      if (isCollectionTimedOut(hbCollectState)) {
+        xQueueSend(heartbeatPublishQueue, &hbCollectState.payload, pdMS_TO_TICKS(10));
+        xEventGroupSetBits(mqttPublishEventGroup, PUBLISH_HEARTBEAT_BIT);
+        #if DEBUG_MODE
+        Serial.println("Heartbeat collection timed out, signaling MQTT publish task.");
+        #endif
       }
 
 
@@ -151,6 +207,9 @@ void incomingCanTask(void * parameter) {
       Serial.println(status);
       #endif
     }
+
+
+    vTaskDelay(pdMS_TO_TICKS(100)); // small delay to yield CPU
 
   }
 
@@ -307,6 +366,9 @@ void imuTask(void * parameter) {
         if (alertPublishQueue != NULL) {
           BaseType_t result = xQueueSend(alertPublishQueue, &alertToSend, pdMS_TO_TICKS(5));
           #if DEBUG_MODE
+          printAlertPayload(alertToSend);
+
+          Serial.println("Sent IMU reading to queue.");
           if (result == errQUEUE_FULL) {
             Serial.println("Alert queue full.");
           } else {
@@ -447,8 +509,8 @@ void setup(void) {
 
   // setup wifi as client
   WiFi.mode(WIFI_STA);
-  //connectToWifi(); // use this for home network but not for WPA-2 Enterprise
-  connectToWifiEnterprise();
+  connectToWifi(); // use this for home network but not for WPA-2 Enterprise
+  // connectToWifiEnterprise();
 
   // set up mqtt 
   mqttClient.setBufferSize(512);
@@ -456,13 +518,73 @@ void setup(void) {
 
   connectToMQTT();
 
-  // create tasks 
-  /* xTaskCreatePinnedToCore(gpsTask, "GPSTask", 4096, NULL, 1, &gpsTaskHandle, 1);
-  xTaskCreatePinnedToCore(imuTask, "IMUTask", 4096, NULL, 1, &imuTaskHandle, 1);
-  // HIGH priority 
-  xTaskCreatePinnedToCore(manualAlertTask, "ManualAlertTask", 4096, NULL, 1, NULL, 1);
-  xTaskCreatePinnedToCore(mqttPublishTask, "MQTTPublishTask", 8192, NULL, 2, NULL, 1); */
+  // communication/protocol tasks for core 1 
+  xTaskCreatePinnedToCore(
+    mqttPublishTask,
+    "MQTTPublishTask",
+    8192,
+    NULL,
+    2, // higher priority for alert sending
+    &mqttPublishTaskHandle,
+    1 // core 0 or 1 
+  ); 
 
+  xTaskCreatePinnedToCore(
+    incomingCanTask,
+    "IncomingCanTask",
+    4096,
+    NULL,
+    2,
+    &canTaskHandle,
+    1
+  );
+
+  xTaskCreatePinnedToCore(
+    heartbeatRequestTask,
+    "HeartbeatReqTask",
+    2048,
+    NULL,
+    1,
+    &heartbeatTaskHandle,
+    1
+  );
+
+
+  // for core 0 
+
+  xTaskCreatePinnedToCore(
+    manualAlertTask, 
+    "ManualAlertTask",
+    2048,
+    NULL,
+    3,
+    &manualAlertTaskHandle,
+    0
+  );
+
+  xTaskCreatePinnedToCore(
+    imuTask,
+    "IMUTask",
+    4096,
+    NULL,
+    2,
+    &imuTaskHandle,
+    0
+  );
+
+  xTaskCreatePinnedToCore(
+    gpsTask,
+    "GPSTask",
+    4096,
+    NULL,
+    1,
+    &gpsTaskHandle,
+    0
+  );
+
+
+
+  
 }
 
 void loop() { 

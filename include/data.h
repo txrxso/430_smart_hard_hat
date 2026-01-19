@@ -139,13 +139,6 @@ typedef struct {
 } __attribute__((packed)) noiseHB_t;
 
 
-// tracking structure for collecting heartbeats (need to know state)
-struct hbCollection {
-    bool isCollecting; 
-    TickType_t startTime; 
-    hbPayload payload; // payload.modulesOnline gives array of NodeIDs that responded
-};
-
 // stuff for heartbeat payload for MQTT - keep everything as low memory as possible (e.g., double rather than float)
 struct hbPayload {
     // array of NodeIDs that responded
@@ -181,6 +174,13 @@ struct hbPayload {
     float noise_db; // in decibels
 };
 
+// tracking structure for collecting heartbeats (need to know state)
+struct hbCollection {
+    bool isCollecting; 
+    TickType_t startTime; 
+    hbPayload payload; // payload.modulesOnline gives array of NodeIDs that responded
+};
+
 
 // helpers related to data structs
 const char* alertTypeToString(AlertType type);
@@ -190,5 +190,7 @@ bool serializeHB(const hbPayload& heartbeat, char* buffer, size_t bufferSize);
 bool isCollectionTimedOut(hbCollection& collection);
 void aggHeartbeatResponse(NodeID nodeId, const twai_message_t& msg, hbCollection& collection);
 
+// helpers for printing
+void printAlertPayload(const AlertPayload& alert);
 
 #endif

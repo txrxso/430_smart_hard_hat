@@ -116,3 +116,20 @@ void aggHeartbeatResponse(NodeID nodeId, const twai_message_t& msg, hbCollection
 
   }
 }
+
+
+void printAlertPayload(const AlertPayload& alert) {
+    Serial.println("Alert Payload:");
+    Serial.printf(" Event: %s\n", alertTypeToString(alert.event));
+    Serial.printf(" DateTime: %s\n", alert.dateTime);
+    Serial.printf(" Latitude: %.6f\n", alert.latitude);
+    Serial.printf(" Longitude: %.6f\n", alert.longitude);
+    Serial.printf(" Altitude: %.2f m\n", alert.altitude);
+    Serial.println(" Measurements:");
+    for (int i = 0; i < 5; i++) {
+        if (strlen(alert.measurements[i].key) > 0) {
+            Serial.printf("  - %s: %.2f\n", alert.measurements[i].key, alert.measurements[i].value);
+        }
+    }
+
+}
