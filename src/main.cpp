@@ -25,7 +25,7 @@
 
 // define DEBUG mode to print stuff
 #define DEBUG_MODE 1 
-#define HEARTBEAT_INTERVAL_MIN 1 // set to 5 minutes // in minutes
+#define HEARTBEAT_INTERVAL_MIN 0.5 // set to 5 minutes // in minutes
 
 // for maintaining connection state
 WiFiClient wifiClient;
@@ -48,8 +48,8 @@ EventGroupHandle_t mqttPublishEventGroup = NULL;
 
 // global heartbeat collection state (shared bewteen tasks)
 hbCollection hbCollectState = {
-  .isCollecting = true
-}; // should start with isCollecting = false
+  .isCollecting = false,
+}; // start with isCollecting = true so requests can begin immediately
 
 bool connectToMQTT() {
   #if DEBUG_MODE
@@ -94,6 +94,9 @@ bool connectToMQTT() {
 // TASK: just sends requests for heartbeat data based on timer
 // DOES NOT WAIT FOR RESPONSES
 void heartbeatRequestTask(void * parameter) {
+  #if DEBUG_MODE
+  Serial.println("Heartbeat Request Task started.");
+  #endif
   TickType_t prevWakeTime = xTaskGetTickCount(); // keep track of time to use for next wake up for interval 
   const TickType_t heartbeatInterval = pdMS_TO_TICKS(HEARTBEAT_INTERVAL_MIN * 60 * 1000);
 
@@ -102,7 +105,12 @@ void heartbeatRequestTask(void * parameter) {
     if (!hbCollectState.isCollecting) { 
       // initialize hbCollection state
       hbCollectState.startTime = xTaskGetTickCount();
+      hbCollectState.isCollecting = true; // mark as collecting
       memset(&hbCollectState.payload, 0, sizeof(hbPayload)); // zero everything
+
+      #if DEBUG_MODE
+      Serial.println("Sending heartbeat request...");
+      #endif
 
       // send RTR for heartbeat data via CAN
       sendHeartbeatRequest();
@@ -190,6 +198,7 @@ void incomingCanTask(void * parameter) {
         #if DEBUG_MODE
         Serial.println("Heartbeat collection timed out, signaling MQTT publish task.");
         #endif
+        hbCollectState.isCollecting = false; // reset collection state
       }
 
 
@@ -197,7 +206,7 @@ void incomingCanTask(void * parameter) {
 
     else if (status == ESP_ERR_TIMEOUT) {
       #if CAN_DEBUG
-      Serial.println("No CAN msg recv'd within timeout.");
+      // Serial.println("No CAN msg recv'd within timeout.");
       #endif 
     }
 
