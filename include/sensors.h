@@ -19,6 +19,9 @@
 // baud rate
 #define GPS_BAUD 9600
 
+#define IMU_DEBUG 1 
+#define GPS_DEBUG 0
+#define MQTT_DEBUG 1 
 
 /* 
 1. Freefall detection (<0.3G for 100 ms)

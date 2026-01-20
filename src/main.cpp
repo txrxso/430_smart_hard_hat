@@ -1,3 +1,8 @@
+/*
+Firmware for ESP32 gateway module.
+Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bus.
+*/
+
 // IMU (MPU6050)
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
@@ -24,7 +29,6 @@
 #include <freertos/queue.h>
 
 // define DEBUG mode to print stuff
-#define DEBUG_MODE 1 
 #define HEARTBEAT_INTERVAL_MIN 0.5 // set to 5 minutes // in minutes
 
 // for maintaining connection state
@@ -52,7 +56,7 @@ hbCollection hbCollectState = {
 }; // start with isCollecting = true so requests can begin immediately
 
 bool connectToMQTT() {
-  #if DEBUG_MODE
+  #if MQTT_DEBUG
   Serial.println("Attempting MQTT connection...");
   // print debug info
   Serial.print("WiFi status: ");
@@ -67,7 +71,7 @@ bool connectToMQTT() {
 
   bool success = mqttClient.connect("ESP32Client");
 
-  #if DEBUG_MODE
+  #if MQTT_DEBUG
   if (success) {
     Serial.println("MQTT connected successfully on first attempt");
   } 
@@ -94,11 +98,12 @@ bool connectToMQTT() {
 // TASK: just sends requests for heartbeat data based on timer
 // DOES NOT WAIT FOR RESPONSES
 void heartbeatRequestTask(void * parameter) {
-  #if DEBUG_MODE
+  #if HEARTBEAT_DEBUG
   Serial.println("Heartbeat Request Task started.");
   #endif
   TickType_t prevWakeTime = xTaskGetTickCount(); // keep track of time to use for next wake up for interval 
   const TickType_t heartbeatInterval = pdMS_TO_TICKS(HEARTBEAT_INTERVAL_MIN * 60 * 1000);
+  uint32_t hbReqCount = 0; // for debugging purposes
 
   while (true) {
     // only send if not currently collecting 
@@ -108,13 +113,21 @@ void heartbeatRequestTask(void * parameter) {
       hbCollectState.isCollecting = true; // mark as collecting
       memset(&hbCollectState.payload, 0, sizeof(hbPayload)); // zero everything
 
-      #if DEBUG_MODE
+      #if HEARTBEAT_DEBUG
       Serial.println("Sending heartbeat request...");
       #endif
 
       // send RTR for heartbeat data via CAN
       sendHeartbeatRequest();
 
+      hbReqCount++;
+
+    }
+
+    else {
+      #if HEARTBEAT_DEBUG
+      Serial.println("Skipping heartbeat request.");
+      #endif
     }
 
     // wait for next interval to request again
@@ -162,16 +175,12 @@ void incomingCanTask(void * parameter) {
           }
         } 
 
-        # if DEBUG_MODE
+        # if HEARTBEAT_DEBUG
         Serial.printf("Aggregated heartbeat response from Node ID: 0x%02X\n", nodeId);
         #endif
         
       }
       else if (msgType == ALERT_NOTIFICATION) {
-        // handle alert notification 
-        
-        // parse CAN message
-
         // send an ACK back to peripheral module
         twai_message_t ack_msg;
         ack_msg.identifier = buildCANID(CONTROL, ALERT_ACK, GATEWAY_NODE);
@@ -180,6 +189,10 @@ void incomingCanTask(void * parameter) {
         ack_msg.data_length_code = 1;
         ack_msg.data[0] = 0x01; // simple ACK payload
         twai_transmit(&ack_msg, pdMS_TO_TICKS(100));
+
+        // handle alert notification 
+        
+        // parse CAN message
 
         // forward alert to mqttPublishTask via alertPublishQueue
         // signal to event group
@@ -191,17 +204,7 @@ void incomingCanTask(void * parameter) {
         // TO DO
       }
 
-      // check again if heartbeat collection timed out -> need to signal to mqttPublishEventGroup
-      if (isCollectionTimedOut(hbCollectState)) {
-        xQueueSend(heartbeatPublishQueue, &hbCollectState.payload, pdMS_TO_TICKS(10));
-        xEventGroupSetBits(mqttPublishEventGroup, PUBLISH_HEARTBEAT_BIT);
-        #if DEBUG_MODE
-        Serial.println("Heartbeat collection timed out, signaling MQTT publish task.");
-        #endif
-        hbCollectState.isCollecting = false; // reset collection state
-      }
-
-
+  
     }
 
     else if (status == ESP_ERR_TIMEOUT) {
@@ -215,6 +218,18 @@ void incomingCanTask(void * parameter) {
       Serial.println("Error recv. CAN msg.");
       Serial.println(status);
       #endif
+    }
+
+    // check timeout regardless of whether a message was received for a heartbeat response
+    // check again if heartbeat collection timed out -> need to signal to mqttPublishEventGroup
+    if (hbCollectState.isCollecting && isCollectionTimedOut(hbCollectState)) {
+      #if MQTT_DEBUG
+      Serial.println("Heartbeat collection timed out, signaling MQTT publish task.");
+      #endif
+      xQueueSend(heartbeatPublishQueue, &hbCollectState.payload, pdMS_TO_TICKS(10));
+      xEventGroupSetBits(mqttPublishEventGroup, PUBLISH_HEARTBEAT_BIT);
+      hbCollectState.isCollecting = false; // reset collection state flag
+      Serial.println("Heartbeat collection timed out. Resetting flag.");
     }
 
 
@@ -290,7 +305,7 @@ void mqttPublishTask(void * parameter) {
 
           // if publish failed, put message back at front of queue 
           if (!success) {
-            #if DEBUG_MODE
+            #if MQTT_DEBUG
             Serial.println("MQTT publish failed, re-queuing alert.");
             Serial.println("Following payload failed to be published:");
             Serial.println(alertPayloadBuffer);
@@ -299,7 +314,7 @@ void mqttPublishTask(void * parameter) {
             break; // exit while loop to retry later 
           } 
           else {
-            #if DEBUG_MODE
+            #if MQTT_DEBUG
             Serial.println("MQTT alert published successfully.");
             Serial.println(alertPayloadBuffer);
             #endif
@@ -307,7 +322,7 @@ void mqttPublishTask(void * parameter) {
 
         }
         else {
-          #if DEBUG_MODE
+          #if MQTT_DEBUG
           Serial.println("Failed to serialize alert payload to JSON.");
           #endif
           continue; // skip to next alert if serialization failed
@@ -374,7 +389,7 @@ void imuTask(void * parameter) {
         // send alert to queue 
         if (alertPublishQueue != NULL) {
           BaseType_t result = xQueueSend(alertPublishQueue, &alertToSend, pdMS_TO_TICKS(5));
-          #if DEBUG_MODE
+          #if IMU_DEBUG
           printAlertPayload(alertToSend);
 
           Serial.println("Sent IMU reading to queue.");
@@ -385,7 +400,7 @@ void imuTask(void * parameter) {
           }
           #endif 
         } else {
-          #if DEBUG_MODE
+          #if IMU_DEBUG
           Serial.println("Alert publish queue is NULL, cannot send alert.");
           #endif
         }
@@ -395,7 +410,7 @@ void imuTask(void * parameter) {
       }
 
       else {
-        #if DEBUG_MODE
+        #if IMU_DEBUG
         Serial.println("IMU event detected but cancel timer active, ignoring.");
         #endif
       }
@@ -444,7 +459,7 @@ void gpsTask(void * parameter) {
   while (true) { 
     // read gps data and always store most recent value 
     if (gpsRead(geodata)) { 
-      #if DEBUG_MODE 
+      #if GPS_DEBUG 
       Serial.print("Read GPS data.");
 
       if (gpsHasFix()) { 
@@ -462,7 +477,7 @@ void gpsTask(void * parameter) {
       // push data to queue for other tasks to use
       xQueueOverwrite(gpsQueue, &geodata);
 
-      #if DEBUG_MODE
+      #if GPS_DEBUG
       Serial.println("GPS data pushed to queue.");
       #endif
 
@@ -509,7 +524,7 @@ void setup(void) {
   heartbeatPublishQueue = xQueueCreate(10, sizeof(AlertPayload));
   canTxQueue = xQueueCreate(10, sizeof(twai_message_t));
 
-  #if DEBUG_MODE 
+  #if MQTT_DEBUG 
   if (mqttPublishEventGroup == NULL || gpsQueue == NULL || imuQueue == NULL) { 
     Serial.println("Failed to create event group or queues.");
     while(1);

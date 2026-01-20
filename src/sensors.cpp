@@ -96,6 +96,9 @@ imuData getLatestIMUData() {
 
 
 void readIMU(imuData &data) {
+  #if IMU_DEBUG
+  Serial.println("Reading IMU data...");
+  #endif
   sensors_event_t a, g, temp; // read raw
   mpu.getEvent(&a, &g, &temp);
 
@@ -115,6 +118,9 @@ void readIMU(imuData &data) {
 }
 
 SafetyEvent analyzeIMUData(const imuData &data) {
+  #if IMU_DEBUG
+  Serial.println("Analyzing IMU data...");
+  #endif
   // add to circular buffer
   accelWindow[windowIndex] = data.resultant_acc;
   gyroWindow[windowIndex] = data.resultant_gyro;

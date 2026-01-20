@@ -9,6 +9,7 @@
 
 // debug 
 #define CAN_DEBUG 1
+#define HEARTBEAT_DEBUG 1
 
 // CAN pins 
 #define CAN_TX_PIN 5
