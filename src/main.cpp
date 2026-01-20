@@ -18,6 +18,7 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 #include "data.h"
 #include "button.h"
 #include "can.h"
+#include "debug.h"
 
 // CAN 
 #include <driver/twai.h>
@@ -223,7 +224,7 @@ void incomingCanTask(void * parameter) {
     // check timeout regardless of whether a message was received for a heartbeat response
     // check again if heartbeat collection timed out -> need to signal to mqttPublishEventGroup
     if (hbCollectState.isCollecting && isCollectionTimedOut(hbCollectState)) {
-      #if MQTT_DEBUG
+      #if MQTT_DEBUG || HEARTBEAT_DEBUG
       Serial.println("Heartbeat collection timed out, signaling MQTT publish task.");
       #endif
       xQueueSend(heartbeatPublishQueue, &hbCollectState.payload, pdMS_TO_TICKS(10));
@@ -389,20 +390,25 @@ void imuTask(void * parameter) {
         // send alert to queue 
         if (alertPublishQueue != NULL) {
           BaseType_t result = xQueueSend(alertPublishQueue, &alertToSend, pdMS_TO_TICKS(5));
-          #if IMU_DEBUG
+          #if IMU_DEBUG == 1
           printAlertPayload(alertToSend);
-
+          #endif 
+          
+          #if IMU_DEBUG == 2 
           Serial.println("Sent IMU reading to queue.");
           if (result == errQUEUE_FULL) {
             Serial.println("Alert queue full.");
-          } else {
+          } 
+          
+          else {
             Serial.println("Alert pushed to publish queue.");
           }
-          #endif 
-        } else {
-          #if IMU_DEBUG
-          Serial.println("Alert publish queue is NULL, cannot send alert.");
           #endif
+
+        } 
+        
+        else {
+          Serial.println("Alert publish queue is NULL, cannot send alert.");
         }
 
         // signal MQTT 

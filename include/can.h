@@ -6,10 +6,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include "data.h"
-
-// debug 
-#define CAN_DEBUG 1
-#define HEARTBEAT_DEBUG 1
+#include "debug.h"
 
 // CAN pins 
 #define CAN_TX_PIN 5

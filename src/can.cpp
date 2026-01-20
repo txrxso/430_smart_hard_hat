@@ -71,11 +71,11 @@ void sendHeartbeatRequest() {
     esp_err_t status = twai_transmit(&rtr_msg, pdMS_TO_TICKS(100));
 
     if (status == ESP_OK) {
-        #if CAN_DEBUG
+        #if HEARTBEAT_DEBUG
         Serial.println("Heartbeat RTR sent successfully.");
         #endif
     } else {
-        #if CAN_DEBUG
+        #if HEARTBEAT_DEBUG
         Serial.printf("Failed to send Heartbeat RTR: 0x%X\n", status);
         #endif
     }

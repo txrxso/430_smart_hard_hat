@@ -27,7 +27,23 @@ bool gpsHasFix() {
   return gps.location.isValid() && gps.satellites.value() >= 0;
 }
 
+#if MOCK_GPS 
+bool gpsRead(gpsData &data) {
+  // mock gps, return placeholder values
+  data.latitude = 49.2606;
+  data.longitude = -123.2460;
+  data.altitude = 15.0;
+  data.hdop = 0.8;
+  data.satellites = 12;
 
+  snprintf(data.dateTime, sizeof(data.dateTime), "2024/01/19,10:30:45");
+
+  return true;
+
+}
+
+
+#else 
 bool gpsRead(gpsData &data) { 
   // update gps data structure with latest values from gps and return true if location updated
   // timeout after 1 second if no new data 
@@ -76,6 +92,9 @@ bool gpsRead(gpsData &data) {
 
 }
 
+#endif // MOCK_GPS
+
+
 bool setupIMU(){ 
   if (!mpu.begin()) {
     Serial.println("Failed to find MPU6050 chip");
@@ -96,7 +115,7 @@ imuData getLatestIMUData() {
 
 
 void readIMU(imuData &data) {
-  #if IMU_DEBUG
+  #if IMU_DEBUG == 2 
   Serial.println("Reading IMU data...");
   #endif
   sensors_event_t a, g, temp; // read raw
@@ -118,7 +137,7 @@ void readIMU(imuData &data) {
 }
 
 SafetyEvent analyzeIMUData(const imuData &data) {
-  #if IMU_DEBUG
+  #if IMU_DEBUG == 2
   Serial.println("Analyzing IMU data...");
   #endif
   // add to circular buffer
