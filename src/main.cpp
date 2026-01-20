@@ -1,6 +1,10 @@
 /*
 Firmware for ESP32 gateway module.
 Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bus.
+
+TO DO: 
+- why is alert payload being published for values of 2.79 gyro and 1.23 acc (resultant)
+- change mqtt heartbeat to publish "modulesOnline":[0,0,0] to [1,0,0] if there is an IMU reading
 */
 
 // IMU (MPU6050)
@@ -227,6 +231,26 @@ void incomingCanTask(void * parameter) {
       #if MQTT_DEBUG || HEARTBEAT_DEBUG
       Serial.println("Heartbeat collection timed out, signaling MQTT publish task.");
       #endif
+
+      // add local IMU and gps data
+      imuData temp_imu;
+      if (xQueuePeek(imuQueue, &temp_imu, 0) == pdTRUE) {
+        hbCollectState.payload.resultant_acc = temp_imu.resultant_acc;
+        hbCollectState.payload.resultant_gyro = temp_imu.resultant_gyro;
+      }
+      gpsData temp_gps; 
+      if (xQueuePeek(gpsQueue, &temp_gps, 0) == pdTRUE) {
+        hbCollectState.payload.latitude = temp_gps.latitude;
+        hbCollectState.payload.longitude = temp_gps.longitude;
+        hbCollectState.payload.altitude = temp_gps.altitude;
+        hbCollectState.payload.hdop = temp_gps.hdop;
+        hbCollectState.payload.satellites = temp_gps.satellites;
+        strncpy(hbCollectState.payload.dateTime, temp_gps.dateTime, sizeof(hbCollectState.payload.dateTime) - 1);
+        hbCollectState.payload.dateTime[sizeof(hbCollectState.payload.dateTime) - 1] = '\0';
+      }
+
+
+      // now publish
       xQueueSend(heartbeatPublishQueue, &hbCollectState.payload, pdMS_TO_TICKS(10));
       xEventGroupSetBits(mqttPublishEventGroup, PUBLISH_HEARTBEAT_BIT);
       hbCollectState.isCollecting = false; // reset collection state flag
@@ -333,6 +357,44 @@ void mqttPublishTask(void * parameter) {
 
     }
     
+
+    else if (bits & PUBLISH_HEARTBEAT_BIT) {
+      hbPayload hbToSend;
+      
+      // process all hbs in queue 
+      while (heartbeatPublishQueue != NULL && xQueueReceive(heartbeatPublishQueue, &hbToSend, 0) == pdTRUE) {
+        // prepare JSON payload
+        if (serializeHB(hbToSend, heartbeatPayloadBuffer, sizeof(heartbeatPayloadBuffer))) {
+          bool success = mqttClient.publish(MQTT_TOPIC_HEARTBEATS, heartbeatPayloadBuffer);
+
+          // if publish failed, put message back at front of queue 
+          if (!success) {
+            #if MQTT_DEBUG
+            Serial.println("MQTT heartbeat publish failed, re-queuing.");
+            Serial.println("Following payload failed to be published:");
+            Serial.println(heartbeatPayloadBuffer);
+            #endif
+            xQueueSendToFront(heartbeatPublishQueue, &hbToSend, pdMS_TO_TICKS(5));
+            break; // exit while loop to retry later 
+          } 
+          else {
+            #if MQTT_DEBUG
+            Serial.println("MQTT heartbeat published successfully.");
+            Serial.println(heartbeatPayloadBuffer);
+            #endif
+          }
+
+        }
+        else {
+          #if MQTT_DEBUG
+          Serial.println("Failed to serialize heartbeat payload to JSON.");
+          #endif
+          continue; // skip to next heartbeat if serialization failed
+        }
+      }
+
+
+    }
     vTaskDelay(pdMS_TO_TICKS(50)); 
 
   }
