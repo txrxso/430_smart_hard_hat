@@ -1,22 +1,30 @@
 # 430_gateway_node
 
-## Parameters to change for compilation
-In `main.cpp`: 
-1. Change DEBUG_MODE to 0 to compile without extra `Serial.println()` debug statements.
-2. Change `HEARTBEAT_INTERVAL_MIN` to the desired value in minutes. 
+## Debug modes 
+Change the following flags in `include/sensors.h` : 
 
+```c++
+#define IMU_DEBUG 1 // turned on
+#define GPS_DEBUG 0 // turned off
+#define MQTT_DEBUG 1 
 ```
-// define DEBUG mode to print stuff
-#define DEBUG_MODE 1 
-#define HEARTBEAT_INTERVAL_MIN 5 // in minutes
+
+Change the following flags in `include/can.h` : 
+
+```c++
+#define CAN_DEBUG 1
+#define HEARTBEAT_DEBUG 1
 ```
+
+
 
 ## Add Required Wifi Credentials
 
 1. `touch include/secrets.h`
 2. Include the following:
 
-```#ifndef SECRETS_H
+```c++
+#ifndef SECRETS_H
 #define SECRETS_H
 
 // WPA-2 wifi credentials - change these values to match your CWL
@@ -31,6 +39,3 @@ In `main.cpp`:
 
 #endif 
 ```
-## To run native tests
-Ensure that:
-1) `gcc --version` returns some version from CMD. Otherwise, follow: https://code.visualstudio.com/docs/cpp/config-mingw to add MinGW-w64 `bin` to the `PATH` environment variable. 
