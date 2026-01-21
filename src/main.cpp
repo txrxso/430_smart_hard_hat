@@ -54,6 +54,7 @@ QueueHandle_t heartbeatPublishQueue; // MQTT publish heartbeat data
 QueueHandle_t canTxQueue; // outgoing CAN messages
 
 EventGroupHandle_t mqttPublishEventGroup = NULL;
+EventGroupHandle_t mqttPublishHealthGroup = NULL;
 
 // global heartbeat collection state (shared bewteen tasks)
 hbCollection hbCollectState = {
@@ -223,6 +224,7 @@ void incomingCanTask(void * parameter) {
       Serial.println("Error recv. CAN msg.");
       Serial.println(status);
       #endif
+
     }
 
     // check timeout regardless of whether a message was received for a heartbeat response
@@ -585,6 +587,7 @@ void setup(void) {
   } 
 
   mqttPublishEventGroup = xEventGroupCreate();
+  mqttPublishHealthGroup = xEventGroupCreate();
   // create queues for sharing data between threads/tasks 
   gpsQueue = xQueueCreate(1, sizeof(gpsData));
   imuQueue = xQueueCreate(1, sizeof(imuData));
@@ -597,10 +600,14 @@ void setup(void) {
     Serial.println("Failed to create event group or queues.");
     while(1);
   }
+  if (mqttPublishHealthGroup == NULL) { 
+    Serial.println("Failed to create mqttPublishHealthGroup.");
+    while(1);
+  }
   #endif 
 
   // setup wifi as client
-  WiFi.mode(WIFI_STA);
+  WiFi.mode(WIFI_STA); // TO DO: sleep mode? low power consumption. can be interrupt driven?
   connectToWifi(); // use this for home network but not for WPA-2 Enterprise
   // connectToWifiEnterprise();
 

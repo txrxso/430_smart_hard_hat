@@ -1,6 +1,7 @@
 #include "can.h"
 #include "data.h"
 
+int can_fail_count = 0;
 
 bool initCAN() { 
   // get back to clean state before trying
@@ -53,7 +54,7 @@ NodeID getNodeIDFromID(uint32_t canID) {
     return static_cast<NodeID>(canID & 0x07);
 }
 
-void sendHeartbeatRequest() {
+esp_err_t sendHeartbeatRequest() {
     twai_message_t rtr_msg;
 
     // clear
@@ -79,5 +80,64 @@ void sendHeartbeatRequest() {
         Serial.printf("Failed to send Heartbeat RTR: 0x%X\n", status);
         #endif
     }
+
+    return status; // return so later functions can handle retry and keepign track of failures
+
+}
+
+bool checkCanStatus(esp_err_t status) {
+  // true = signal mqttPublishHealth something wrong with CAN
+  // false = keep going
+  twai_status_info_t status_info;
+  twai_get_status_info(&status_info);
+
+  if (status_info.state == TWAI_STATE_BUS_OFF) {
+    #if CAN_DEBUG 
+    Serial.println("TWAI state bus off.");
+    #endif
+    return true;
+
+  }
+
+  if (status == ESP_OK) {
+    // reset fail count 
+    can_fail_count = 0;
+  }
+  else if (status == ESP_FAIL || status == ESP_ERR_INVALID_STATE) { 
+    can_fail_count++;
+  }
+  else {
+    // CAN ADD LATER (not sure if it's that important)
+  }
+
+  // check against some threshold of allowed CAN fails before signalling bool 
+  // to be used to signal mqttPublishHealth
+  return (can_fail_count >= 20);
+
+}
+
+
+void resetBusState() {
+  // initiate bus recovery
+  twai_status_info_t status_info;
+  twai_get_status_info(&status_info);
+
+  if (status_info.state == TWAI_STATE_BUS_OFF) {
+    twai_reconfigure_alerts(TWAI_ALERT_BUS_RECOVERED, NULL);
+
+    if (twai_initiate_recovery() == ESP_OK) { 
+      uint32_t alerts; 
+      twai_read_alerts(&alerts, pdMS_TO_TICKS(200));
+
+      if (alerts & TWAI_ALERT_BUS_RECOVERED) { 
+        twai_start();
+        can_fail_count = 0;
+        Serial.println("CAN recovery successful.");
+      }
+      else {
+        Serial.println("CAN recovery timed out.");
+      }
+    }
+  }
 
 }
