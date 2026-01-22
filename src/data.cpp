@@ -54,9 +54,8 @@ bool serializeAP(const AlertPayload& alert, char* buffer, size_t bufferSize) {
 
 // helper to serialize HeartbeatPayload to string that can be parsed by backend as JSON
 bool serializeHB(const hbPayload& heartbeat, char* buffer, size_t bufferSize) {
-
   int len = snprintf(buffer, bufferSize,
-    "{\"modulesOnline\":[%d,%d,%d],\"latitude\":%.6f,\"longitude\":%.6f,\"altitude\":%.2f,\"hdop\":%.2f,\"satellites\":%d,\"datetime\":\"%s\",\"resultant_acc\":%.2f,\"resultant_gyro\":%.2f,\"aqi_pm25_us\":%.2f,\"aqi_pm100_us\":%.2f,\"aqi_uba\":%.2f}",
+    "{\"worker_id\": 10,\"modulesOnline\":[%d,%d,%d],\"latitude\":%.6f,\"longitude\":%.6f,\"altitude\":%.2f,\"hdop\":%.2f,\"satellites\":%d,\"datetime\":\"%s\",\"resultant_acc\":%.2f,\"resultant_gyro\":%.2f,\"aqi_pm25_us\":%.2f,\"aqi_pm100_us\":%.2f,\"aqi_uba\":%.2f,\"noise_db\":%.2f}",
     // backend will handle modulesOnline and map to exactly what module is online using nodeID
     heartbeat.modulesOnline[0],
     heartbeat.modulesOnline[1],
@@ -71,7 +70,8 @@ bool serializeHB(const hbPayload& heartbeat, char* buffer, size_t bufferSize) {
     heartbeat.resultant_gyro,
     heartbeat.aqi_pm25_us,
     heartbeat.aqi_pm100_us,
-    heartbeat.aqi_uba);
+    heartbeat.aqi_uba,
+    heartbeat.noise_db);
 
   if (len >= bufferSize) return false;
   return true;
