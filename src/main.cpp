@@ -72,9 +72,9 @@ bool connectToMQTT() {
   Serial.print("ESP32 IP: ");
   Serial.println(WiFi.localIP());
   Serial.print("Connecting to broker: ");
-  Serial.print(MQTT_SERVER_PUBLIC_MOSQUITTO);
+  Serial.print(MQTT_SERVER_HIVEMQ_PUBLIC);
   Serial.print(":");
-  Serial.println(MQTT_PORT_MOSQUITTO);
+  Serial.println(MQTT_PORT_HIVEMQ_PUBLIC);
   #endif 
 
   bool success = mqttClient.connect("ESP32Client");
@@ -316,7 +316,7 @@ void mqttPublishTask(void * parameter) {
         // prepare JSON payload
         // (each task that can signal the bit will forward the msg to the queue)
         if (serializeAP(alertToSend, alertPayloadBuffer, sizeof(alertPayloadBuffer))) {
-          bool success = mqttClient.publish(MQTT_TOPIC_TEST, alertPayloadBuffer);
+          bool success = mqttClient.publish(MQTT_TOPIC_ALERTS, alertPayloadBuffer);
 
           // if publish failed, put message back at front of queue 
           if (!success) {
@@ -620,7 +620,7 @@ void setup(void) {
 
   // set up mqtt 
   mqttClient.setBufferSize(512);
-  mqttClient.setServer(MQTT_SERVER_PUBLIC_MOSQUITTO, MQTT_PORT_MOSQUITTO);
+  mqttClient.setServer(MQTT_SERVER_HIVEMQ_PUBLIC, MQTT_PORT_HIVEMQ_PUBLIC);
 
   connectToMQTT();
 
