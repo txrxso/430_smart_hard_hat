@@ -168,18 +168,33 @@ SafetyEvent analyzeIMUData(const imuData &data) {
 
   // check that counts exceed required number of samples in the buffer to cbe considered
   if (heavyImpactCount >= SUSTAINED_THRESHOLD) {
+    #if IMU_DEBUG == 1 
+    Serial.println("HEAVY IMPACT.");
+    #endif
     return SafetyEvent::HEAVY_IMPACT;
   }
   else if (mediumImpactCount >= SUSTAINED_THRESHOLD) {
+    #if IMU_DEBUG == 1 
+    Serial.println("MEDIUM IMPACT.");
+    #endif
     return SafetyEvent::MEDIUM_IMPACT;
   }
   else if (highRotationCount >= SUSTAINED_THRESHOLD) {
+    #if IMU_DEBUG == 1 
+    Serial.println("HIGH ROTATION.");
+    #endif
     return SafetyEvent::HIGH_ROTATION;
   }
   else if (freefallCount >= SUSTAINED_THRESHOLD) {
+    #if IMU_DEBUG == 1 
+    Serial.println("FREEFALL.");
+    #endif
     return SafetyEvent::FREEFALL;
   }
   else {
+    #if IMU_DEBUG == 1 
+    Serial.println("NO IMU SAFETY EVENT.");
+    #endif
     return SafetyEvent::NONE;
   }
 }
