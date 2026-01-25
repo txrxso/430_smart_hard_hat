@@ -24,6 +24,8 @@ TO DO:
 #include "can.h"
 #include "debug.h"
 
+#include "esp_wifi.h"
+
 // CAN 
 #include <driver/twai.h>
 
@@ -166,20 +168,6 @@ void incomingCanTask(void * parameter) {
       if (msgType == HEARTBEAT_RESPONSE && !isCollectionTimedOut(hbCollectState)) {
         // handle heartbeat response
         aggHeartbeatResponse(nodeId, incoming_msg, hbCollectState);
-
-        // add GPS values to heartbeat payload from gpsQueue only if not already set 
-        if (hbCollectState.payload.latitude == 0 && hbCollectState.payload.longitude == 0) {
-          // copy over data from gpsQueue if available
-          gpsData currGps; 
-          if (xQueuePeek(gpsQueue, &currGps, pdMS_TO_TICKS(10)) == pdTRUE) {
-            hbCollectState.payload.latitude = currGps.latitude;
-            hbCollectState.payload.longitude = currGps.longitude;
-            hbCollectState.payload.altitude = currGps.altitude;
-            hbCollectState.payload.hdop = currGps.hdop;
-            hbCollectState.payload.satellites = currGps.satellites;
-            strncpy(hbCollectState.payload.dateTime, currGps.dateTime, sizeof(hbCollectState.payload.dateTime));
-          }
-        } 
 
         # if HEARTBEAT_DEBUG
         Serial.printf("Aggregated heartbeat response from Node ID: 0x%02X\n", nodeId);
@@ -610,6 +598,25 @@ void setup(void) {
   WiFi.mode(WIFI_STA); // TO DO: sleep mode? low power consumption. can be interrupt driven?
   connectToWifi(); // use this for home network but not for WPA-2 Enterprise
   // connectToWifiEnterprise();
+
+  // configure power management
+  esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
+
+  // increase listen interval 
+  wifi_config_t conf;
+  esp_err_t ret = esp_wifi_get_config(WIFI_IF_STA, &conf);
+  if (ret == ESP_OK) { 
+    conf.sta.listen_interval = 10;
+    esp_wifi_set_config(WIFI_IF_STA, &conf);
+    #if MQTT_DEBUG
+    Serial.println("WiFi modem sleep enabled (PS_MAX_MODEM) with listen interval 10");
+    #endif
+  } else {
+    #if MQTT_DEBUG 
+    Serial.printf("Failed to get wifi config: %d\n", ret);
+    while(1);
+    #endif
+  }
 
   // set up mqtt 
   mqttClient.setBufferSize(512);

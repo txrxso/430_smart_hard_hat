@@ -93,7 +93,7 @@ enum NodeID : uint8_t {
 
 #define THIS_NODE GATEWAY_NODE
 #define MAX_NODES_RECV 2 
-#define HEARTBEAT_RESPONSE_TIMEOUT_MS 2000 // wait max 2 seconds for heartbeat response
+#define HEARTBEAT_RESPONSE_TIMEOUT_MS 1000 // wait max 2 seconds for heartbeat response
 
 // types of alerts that can be sent to mqtt publish task 
 // (does not incl. periodic tasks like heartbeats)
