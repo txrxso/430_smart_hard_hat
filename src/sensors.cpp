@@ -11,8 +11,8 @@ static unsigned long eventStart = 0;
 static float rAcc = 0; // resultant acceleration
 static float rGyro = 0; // resultant gyro
 
-static float accelWindow[WINDOW_SIZE] = {0};
-static float gyroWindow[WINDOW_SIZE] = {0};
+static float accelWindow[WINDOW_SIZE] = {1.0,1.0,1.0}; // cannot init as 0 b/c that would be free fall case
+static float gyroWindow[WINDOW_SIZE] = {0.0,0.0,0.0};
 static int windowIndex = 0;
 
 static float getResultant(float x, float y, float z) {
