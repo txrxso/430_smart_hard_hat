@@ -12,3 +12,9 @@ lib/README
 
 # credentials
 include/secrets.h
+
+# test files (TEMPORARY)
+test/*
+
+# python env 
+python/430_test_env

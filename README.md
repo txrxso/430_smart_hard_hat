@@ -1,15 +1,20 @@
-# 430_IMU_GPS_Node
+# 430_gateway_node
 
-Code for the sensor module (ESP32 + IMU + GPS) that does the following:
-- Reads IMU Data from the MPU6050 sensor
-- Determines if an impact occurred using IMU Data
-- Polls geolocation data using the Neo6M GPS module
-- Creates and formats payloads to send to the MQTT broker
+## Debug modes 
+Change the following flags in `include/sensors.h` : 
 
-TO DO: 
-- impact detection code
-- CAN code
-- FreeRTOS? Potentially using both cores at the same time and different priority of tasks. 
+```c++
+#define IMU_DEBUG 1 // turned on
+#define GPS_DEBUG 0 // turned off
+#define MQTT_DEBUG 1 
+```
+
+Change the following flags in `include/can.h` : 
+
+```c++
+#define CAN_DEBUG 1
+#define HEARTBEAT_DEBUG 1
+```
 
 
 
@@ -18,7 +23,8 @@ TO DO:
 1. `touch include/secrets.h`
 2. Include the following:
 
-```#ifndef SECRETS_H
+```c++
+#ifndef SECRETS_H
 #define SECRETS_H
 
 // WPA-2 wifi credentials - change these values to match your CWL
