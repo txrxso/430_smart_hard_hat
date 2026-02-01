@@ -21,32 +21,15 @@ const char* alertTypeToString(AlertType type) {
 bool serializeAP(const AlertPayload& alert, char* buffer, size_t bufferSize) { 
 
   int len = snprintf(buffer, bufferSize,
-    "{\"event\":\"%s\",\"datetime\":\"%s\",\"latitude\":%.6f,\"longitude\":%.6f,\"altitude\":%.2f,\"measurements\":[",
+    "{\"event\":\"%s\",\"datetime\":\"%s\",\"latitude\":%.6f,\"longitude\":%.6f,\"altitude\":%.2f,\"noise_db\":%.2f}",
     alertTypeToString(alert.event),
     alert.dateTime,
     alert.latitude,
     alert.longitude,
-    alert.altitude);
+    alert.altitude,
+    alert.noise_db);
 
   if (len >= bufferSize) return false;
-
-  // add measurements dynamically 
-  bool first = true;
-  for (int i = 0; i < 5; i++) {
-    int m_len = snprintf(buffer + len, bufferSize - len,
-      "%s{\"%s\":%.2f}",
-      first ? "" : ",",
-      alert.measurements[i].key,
-      alert.measurements[i].value); 
-
-      if (len + m_len >= bufferSize) return false;
-      len += m_len; // append 
-      first = false;
-  }
-
-  // close the measuremetns array and json 
-  int endlen = snprintf(buffer + len, bufferSize - len, "]}");
-  if (len + endlen >= bufferSize) return false;
 
   return true;
   
@@ -120,11 +103,6 @@ void printAlertPayload(const AlertPayload& alert) {
     Serial.printf(" Latitude: %.6f\n", alert.latitude);
     Serial.printf(" Longitude: %.6f\n", alert.longitude);
     Serial.printf(" Altitude: %.2f m\n", alert.altitude);
-    Serial.println(" Measurements:");
-    for (int i = 0; i < 5; i++) {
-        if (strlen(alert.measurements[i].key) > 0) {
-            Serial.printf("  - %s: %.2f\n", alert.measurements[i].key, alert.measurements[i].value);
-        }
-    }
+    Serial.printf(" Noise: %.2f m\n", alert.noise_db);
 
 }

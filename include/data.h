@@ -108,10 +108,6 @@ enum AlertType {
 // ======================
 // MQTT 
 // ======================
-struct KVPair {
-  char key[16];
-  float value;
-};
 
 // structure to package alert data for MQTT
 struct AlertPayload {
@@ -121,8 +117,7 @@ struct AlertPayload {
   double latitude;
   double longitude;
   double altitude;
-  // key value pairs of measured values 
-  KVPair measurements[5]; // max 5 measurements for now
+  double noise_db;
 };
 
 
