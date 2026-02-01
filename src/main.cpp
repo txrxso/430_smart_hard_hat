@@ -49,7 +49,7 @@ QueueHandle_t imuQueue;
 QueueHandle_t gpsQueue; 
 QueueHandle_t alertPublishQueue; // MQTT publish alerts
 QueueHandle_t heartbeatPublishQueue; // MQTT publish heartbeat data
-QueueHandle_t canTxQueue; // outgoing CAN messages
+QueueHandle_t peripheralCanOutgoingQueue; // outgoing CAN messages
 
 EventGroupHandle_t mqttPublishEventGroup = NULL;
 EventGroupHandle_t mqttPublishHealthGroup = NULL;
@@ -149,6 +149,28 @@ void incomingCanTask(void * parameter) {
   twai_message_t incoming_msg; 
 
   while (true) {
+    TickType_t startFlushTime = xTaskGetTickCount(); 
+    const TickType_t maxFlushDuration = pdMS_TO_TICKS(2000); // max 2 seconds to flush outgoing queue in order 
+    // for us not to block checking for incoming messages which are more important (e.g., ALERTS)
+    twai_message_t outgoing_msg;
+    while ((xTaskGetTickCount() - startFlushTime) < maxFlushDuration && xQueueReceive(peripheralCanOutgoingQueue, &outgoing_msg, 0) == pdTRUE) {
+      esp_err_t txStatus = twai_transmit(&outgoing_msg, pdMS_TO_TICKS(50));
+
+      if (txStatus == ESP_OK) {
+        #if CAN_DEBUG
+        Serial.println("Outgoing CAN message transmitted successfully.");
+        #endif
+      } else {
+        #if CAN_DEBUG
+        Serial.printf("Failed to transmit outgoing CAN message, status=%d\n", txStatus);
+        #endif
+        // requeue for next iteration
+        xQueueSendToFront(peripheralCanOutgoingQueue, &outgoing_msg, pdMS_TO_TICKS(5));
+        // break; // stop flushing to avoid blocking - not sure rn if wnat to immediately break after 1st fail
+      }
+
+    }
+
     // wait for incoming CAN message 
     esp_err_t status = twai_receive(&incoming_msg, pdMS_TO_TICKS(100));
 
@@ -163,15 +185,16 @@ void incomingCanTask(void * parameter) {
       // handle the message based on type of CAN message
       if (msgType == HEARTBEAT_RESPONSE && !isCollectionTimedOut(hbCollectState)) {
         // handle heartbeat response
-        aggHeartbeatResponse(nodeId, incoming_msg, hbCollectState);
+        aggHeartbeatResponse(nodeId, incoming_msg, hbCollectState); // just aggregates, there is a check later within this task to publish
 
         # if HEARTBEAT_DEBUG
         Serial.printf("Aggregated heartbeat response from Node ID: 0x%02X\n", nodeId);
         #endif
         
       }
+      
       else if (msgType == ALERT_NOTIFICATION) {
-        // send an ACK back to peripheral module
+        // send an ACK back to peripheral module (regardless of cancel active, so can reset state on peripheral)
         twai_message_t ack_msg;
         ack_msg.identifier = buildCANID(CONTROL, ALERT_ACK, GATEWAY_NODE);
         ack_msg.extd = 0;
@@ -180,14 +203,56 @@ void incomingCanTask(void * parameter) {
         ack_msg.data[0] = 0x01; // simple ACK payload
         twai_transmit(&ack_msg, pdMS_TO_TICKS(100));
 
-        // TO DO: handle alert notification 
-        
-        // parse CAN message
+        // check cancel timer 
+        if (isCancelActive()) {
+          // active, means we just ignore it.
+          #if CAN_DEBUG
+          Serial.printf("ALERT_NOTIFICATION from Node 0x%02X ignored, cancel timer active.\n", nodeId);
+          #endif
+        }
 
-        // forward alert to mqttPublishTask via alertPublishQueue
-        // signal to event group
+        else {
+          // declare alert payload 
+          AlertPayload alertToSend;
+          memset(&alertToSend, 0, sizeof(AlertPayload)); // use memset to clear/avoid garbage values
         
+          // parse alert 
+          if (nodeId == NODE_NOISE) {
+            noiseAlert_t* noiseAlertFrame = (noiseAlert_t* )incoming_msg.data;
+            alertToSend.event = NOISE_OVER_THRESHOLD;
+            alertToSend.noise_db = static_cast<double>(noiseAlertFrame->noise_db); // alertToSend.noise_db
+          } 
 
+          // attach GPS data 
+          // use xQueuePeek to not remove data from queue
+          gpsData latestGpsData;
+          if (xQueuePeek(gpsQueue, &latestGpsData, 0) == pdTRUE) {
+            // get lat, long, altitude, dateTime from gpsQueue 
+            alertToSend.latitude = latestGpsData.latitude;
+            alertToSend.longitude = latestGpsData.longitude;
+            alertToSend.altitude = latestGpsData.altitude;
+            strncpy(alertToSend.dateTime, latestGpsData.dateTime, sizeof(alertToSend.dateTime));
+          } 
+          else {
+            alertToSend.latitude = 0.0;
+            alertToSend.longitude = 0.0;
+            alertToSend.altitude = 0.0;
+            strncpy(alertToSend.dateTime, "Invalid", sizeof(alertToSend.dateTime));
+          }
+
+          // forward alert to mqttPublishTask via alertPublishQueue
+          if (alertPublishQueue != NULL && xQueueSend(alertPublishQueue, &alertToSend, pdMS_TO_TICKS(5)) == pdTRUE) {
+            #if CAN_DEBUG || MQTT_DEBUG
+            Serial.printf("Alert from noise node queued.");
+            #endif
+            
+            // signal event group
+            xEventGroupSetBits(mqttPublishEventGroup, PUBLISH_CAN_ALERT_BIT);
+          }
+          
+
+        }
+      
       }
   
     }
@@ -422,11 +487,9 @@ void imuTask(void * parameter) {
         }
         
         // populate IMU measurements using imuData.float resultant_acc and resultant_gyro
-        strncpy(alertToSend.measurements[0].key, "acc", sizeof(alertToSend.measurements[0].key));
-        alertToSend.measurements[0].value = data.resultant_acc;
-
-        strncpy(alertToSend.measurements[1].key, "gyro", sizeof(alertToSend.measurements[1].key));
-        alertToSend.measurements[1].value = data.resultant_gyro;
+        alertToSend.resultant_acc= data.resultant_acc;
+        alertToSend.resultant_gyro = data.resultant_gyro;
+        alertToSend.noise_db = 0.0; // just set to 0.0 for now
 
         // TO DO: add severity for SafetyEvent enum 
         
@@ -490,7 +553,40 @@ void manualAlertTask(void * parameter) {
       // activate cancel timer (ignore alerts for next 2 minutes)
       resetCancelTimer(); 
 
-      // TO DO: send manual clear alert to outgoing CAN messages to notify other modules
+      // send manual clear alert to outgoing CAN messages to notify other modules
+      // (gateway -> peripherals)
+      twai_message_t manualClearMsg;
+      manualClearMsg.identifier = buildCANID(CONTROL, ALERT_CLEARED, GATEWAY_NODE);
+      manualClearMsg.extd = 0;
+      manualClearMsg.rtr = 0;
+      manualClearMsg.data_length_code = 0; // no payload required
+
+      // push to outgoing queue 
+      if (xQueueSend(peripheralCanOutgoingQueue, &manualClearMsg, pdMS_TO_TICKS(5)) == pdTRUE) {
+        #if CAN_DEBUG
+        Serial.println("Manual clear CAN message queued");
+        #endif
+      } else {
+          #if CAN_DEBUG
+          Serial.println("Failed to queue manual clear CAN message");
+          #endif
+      }
+      
+
+      // push to outgoing queue for MQTT (gateway -> dashboard)
+      AlertPayload manualClearAlert;
+      memset(&manualClearAlert, 0, sizeof(manualClearAlert));
+      manualClearAlert.event = MANUAL_CLEAR;
+      if (xQueueSend(alertPublishQueue, &manualClearAlert, pdMS_TO_TICKS(5)) == pdTRUE) {
+        #if CAN_DEBUG
+        Serial.println("Manual clear alert successfully queued for MQTT");
+        #endif
+      } else {
+        #if CAN_DEBUG
+        Serial.println("Manual clear alert FAILED TO queue for MQTT");
+        #endif
+      }
+
 
       // signal MQTT publish for manual clear
       xEventGroupSetBits(mqttPublishEventGroup, PUBLISH_MANUAL_CLEAR_BIT);
@@ -570,9 +666,9 @@ void setup(void) {
   // create queues for sharing data between threads/tasks 
   gpsQueue = xQueueCreate(1, sizeof(gpsData));
   imuQueue = xQueueCreate(1, sizeof(imuData));
-  alertPublishQueue = xQueueCreate(10, sizeof(AlertPayload));
+  alertPublishQueue = xQueueCreate(20, sizeof(AlertPayload));
   heartbeatPublishQueue = xQueueCreate(10, sizeof(AlertPayload));
-  canTxQueue = xQueueCreate(10, sizeof(twai_message_t));
+  peripheralCanOutgoingQueue = xQueueCreate(10, sizeof(twai_message_t));
 
   #if MQTT_DEBUG 
   if (mqttPublishEventGroup == NULL || gpsQueue == NULL || imuQueue == NULL) { 

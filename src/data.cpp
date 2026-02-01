@@ -21,13 +21,15 @@ const char* alertTypeToString(AlertType type) {
 bool serializeAP(const AlertPayload& alert, char* buffer, size_t bufferSize) { 
 
   int len = snprintf(buffer, bufferSize,
-    "{\"event\":\"%s\",\"datetime\":\"%s\",\"latitude\":%.6f,\"longitude\":%.6f,\"altitude\":%.2f,\"noise_db\":%.2f}",
+    "{\"event\":\"%s\",\"datetime\":\"%s\",\"latitude\":%.6f,\"longitude\":%.6f,\"altitude\":%.2f,\"noise_db\":%.2f,\"acc\":%.2f,\"gyro\":%.2f}",
     alertTypeToString(alert.event),
     alert.dateTime,
     alert.latitude,
     alert.longitude,
     alert.altitude,
-    alert.noise_db);
+    alert.noise_db,
+    alert.resultant_acc,
+    alert.resultant_gyro);
 
   if (len >= bufferSize) return false;
 
@@ -104,5 +106,7 @@ void printAlertPayload(const AlertPayload& alert) {
     Serial.printf(" Longitude: %.6f\n", alert.longitude);
     Serial.printf(" Altitude: %.2f m\n", alert.altitude);
     Serial.printf(" Noise: %.2f m\n", alert.noise_db);
+    Serial.printf(" Acc: %.2f m\n", alert.resultant_acc);
+    Serial.printf(" Gyro: %.2f m\n", alert.resultant_gyro);
 
 }

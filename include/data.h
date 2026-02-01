@@ -118,6 +118,8 @@ struct AlertPayload {
   double longitude;
   double altitude;
   double noise_db;
+  double resultant_acc;
+  double resultant_gyro;
 };
 
 
@@ -132,6 +134,10 @@ typedef struct {
   uint16_t noise_db;
   uint16_t reserved[3]; // to make sure 8 bytes in data expected
 } __attribute__((packed)) noiseHB_t;
+typedef struct {
+  uint16_t noise_db;
+  uint16_t reserved[3]; // to make sure 8 bytes in data expected
+} __attribute__((packed)) noiseAlert_t;
 
 
 // stuff for heartbeat payload for MQTT - keep everything as low memory as possible (e.g., double rather than float)
