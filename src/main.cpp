@@ -3,8 +3,8 @@ Firmware for ESP32 gateway module.
 Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bus.
 
 TO DO: 
-- why is alert payload being published for values of 2.79 gyro and 1.23 acc (resultant)
 - change mqtt heartbeat to publish "modulesOnline":[0,0,0] to [1,0,0] if there is an IMU reading
+- 
 */
 
 // IMU (MPU6050)
@@ -594,10 +594,8 @@ void setup(void) {
   }
   #endif 
 
-  setupCAN();
-
   // setup wifi as client
-  WiFi.mode(WIFI_STA); // TO DO: sleep mode? low power consumption. can be interrupt driven?
+  WiFi.mode(WIFI_STA); 
   connectToWifi(); // use this for home network but not for WPA-2 Enterprise
   // connectToWifiEnterprise();
 
