@@ -1,10 +1,6 @@
 /*
 Firmware for ESP32 gateway module.
 Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bus.
-
-TO DO: 
-- change mqtt heartbeat to publish "modulesOnline":[0,0,0] to [1,0,0] if there is an IMU reading
-- 
 */
 
 // IMU (MPU6050)
@@ -184,7 +180,7 @@ void incomingCanTask(void * parameter) {
         ack_msg.data[0] = 0x01; // simple ACK payload
         twai_transmit(&ack_msg, pdMS_TO_TICKS(100));
 
-        // handle alert notification 
+        // TO DO: handle alert notification 
         
         // parse CAN message
 
@@ -193,11 +189,6 @@ void incomingCanTask(void * parameter) {
         
 
       }
-      else if (msgType == ALERT_CLEARED) {
-        // handle alert cleared 
-        // TO DO
-      }
-
   
     }
 
