@@ -99,22 +99,17 @@ void aggHeartbeatResponse(NodeID nodeId, const twai_message_t& msg, hbCollection
     collection.payload.aqi_pm25_us = static_cast<float>(aqData->pm25_aqi);
     collection.payload.aqi_pm100_us = static_cast<float>(aqData->pm100_aqi);
     collection.payload.aqi_uba = static_cast<float>(aqData->aqi_uba);
-
+    // mark which node responded 
+    collection.payload.modulesOnline[0] = static_cast<u_int8_t>(nodeId);
   }
   else if (nodeId == NODE_NOISE) {
     noiseHB_t* noiseData = (noiseHB_t*)msg.data;
     collection.payload.noise_db = static_cast<float>(noiseData->noise_db);
+    // mark which node responded 
+    collection.payload.modulesOnline[1] = static_cast<u_int8_t>(nodeId);
 
   }
 
-  // add node id to online modules (ie. marked having responded)
-  for (int i = 0; i < MAX_NODES_RECV; i++) {
-    if (collection.payload.modulesOnline[i] == 0) {
-      collection.payload.modulesOnline[i] = static_cast<uint8_t>(nodeId);
-      break;
-    }
-
-  }
 }
 
 

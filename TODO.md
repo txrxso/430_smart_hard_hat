@@ -44,4 +44,6 @@ Once manual clear condition detected:
 ```
 
 Conditions for something to be `online`: 
-- Received RTR Heartbeat Response from within last 5 minutes +/- 30 seconds 
+- Received RTR Heartbeat Response from within last 5 minutes 
+- Each heartbeat collection cycle is a fresh snapshot, so if a node didn't respond that cycle, we consider it `offline` 
+- Need to add deterministic indexing so `[1,0]` if AIR QUALITY data included and `[0,1]` if only NOISE data included, but `[1,1]` if both responded. 
