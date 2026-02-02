@@ -12,6 +12,8 @@ lib/README
 
 # credentials
 include/secrets.h
+# ROOT CA CERTIFICATES
+include/certs.h 
 
 # test files (TEMPORARY)
 test/*
