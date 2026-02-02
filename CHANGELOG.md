@@ -12,3 +12,11 @@
 - Started `docs` folder for documentation.
 - Changed `modulesOnline` array of `heartbeatPayload` to show the node ID of the node that is 'online' (ie. sent a response to the RTR for heartbeat request)
 (e.g., if noise node ID is 0x02, then `modulesOnline` = [0,2] )
+
+## February 2nd, 2026
+- Added TLS support for private HiveMQ broker to resolve intermittent MQTT_UNAUTHORIZED errors encountered when connecting to the public HiveMQ broker on port 1883. HiveMQ private brokers only allow for traffic through secure port `8883` so TLS was necessary. <br>
+- **BROKER NAME**: fe26426fbe64463790fc2792777c8189.s1.eu.hivemq.cloud <br>
+- **PORT**: 8883
+
+- Verified functionality for `alerts` and `heartbeats` with MQTT Explorer
+- Added `docs/certificates.md` for steps on retrieving the broker root CA cert. 
