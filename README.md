@@ -39,3 +39,23 @@ Change the following flags in `include/can.h` :
 
 #endif 
 ```
+
+### Add Root CA Cert if Using HiveMQ Private Cloud Broker
+To connect to `fe26426fbe64463790fc2792777c8189.s1.eu.hivemq.cloud` on port `8883` (TLS only), we need to set the Root CA certificate.
+
+1. In bash, run `touch include/certs.h`.
+2. Include the following: 
+```c++
+#ifndef CERTS_H
+#define CERTS_H
+
+// HiveMQ Cloud Root CA Certificate
+const char* root_ca = <PASTE CERTIFICATE HERE>;
+
+// the certificate that should be pasted includes the line 'BEGIN CERTIFICATE' up to, and including the line 'END CERTIFICATE'
+
+#endif 
+```
+For how to get the certificate for the broker on HIVE MQ cloud, refer to `docs/certificates`.
+
+3.  In `main.cpp`, set `#define ENABLE_TLS 1`.

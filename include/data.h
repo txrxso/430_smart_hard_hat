@@ -5,6 +5,7 @@
 #ifdef ARDUINO_ARCH_ESP32
   #include <Arduino.h>
   #include <driver/twai.h>
+  #include <freertos/queue.h>
 #else 
   #include <stdint.h>
   #include <stddef.h>
@@ -24,6 +25,8 @@
 SHOULD NEVER receive the following:
 - HEARTBEAT_REQUEST (this is an OUTGOING ONLY message from the gateway to peripheral modules)
 */
+
+extern QueueHandle_t gpsQueue; 
 
 // ======================
 // IMU and GPS
@@ -108,10 +111,6 @@ enum AlertType {
 // ======================
 // MQTT 
 // ======================
-struct KVPair {
-  char key[16];
-  float value;
-};
 
 // structure to package alert data for MQTT
 struct AlertPayload {
@@ -121,8 +120,9 @@ struct AlertPayload {
   double latitude;
   double longitude;
   double altitude;
-  // key value pairs of measured values 
-  KVPair measurements[5]; // max 5 measurements for now
+  double noise_db;
+  double resultant_acc;
+  double resultant_gyro;
 };
 
 
@@ -137,10 +137,14 @@ typedef struct {
   uint16_t noise_db;
   uint16_t reserved[3]; // to make sure 8 bytes in data expected
 } __attribute__((packed)) noiseHB_t;
+typedef struct {
+  uint16_t noise_db;
+  uint16_t reserved[3]; // to make sure 8 bytes in data expected
+} __attribute__((packed)) noiseAlert_t;
 
 
 // stuff for heartbeat payload for MQTT - keep everything as low memory as possible (e.g., double rather than float)
-struct hbPayload {
+struct HeartbeatPayload {
     // array of NodeIDs that responded
     uint8_t modulesOnline[MAX_NODES_RECV] = {0}; // (0 = no module)
 
@@ -178,17 +182,18 @@ struct hbPayload {
 struct hbCollection {
     bool isCollecting; 
     TickType_t startTime; 
-    hbPayload payload; // payload.modulesOnline gives array of NodeIDs that responded
+    HeartbeatPayload payload; // payload.modulesOnline gives array of NodeIDs that responded
 };
 
 
 // helpers related to data structs
 const char* alertTypeToString(AlertType type);
 bool serializeAP(const AlertPayload& alert, char* buffer, size_t bufferSize);
-bool serializeHB(const hbPayload& heartbeat, char* buffer, size_t bufferSize);
+bool serializeHB(const HeartbeatPayload& heartbeat, char* buffer, size_t bufferSize);
 // helpers dealing with heartbeat collection state
 bool isCollectionTimedOut(hbCollection& collection);
 void aggHeartbeatResponse(NodeID nodeId, const twai_message_t& msg, hbCollection& collection);
+void attachGPSToAlert(AlertPayload &alert);
 
 // helpers for printing
 void printAlertPayload(const AlertPayload& alert);
