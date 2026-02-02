@@ -60,3 +60,4 @@ Right now:
 - HIVEMQ Public Broker on Port 1883 sometimes not that stable
 - Try to set up TLS support with `PubSubClient`; though that library for sure doesn't include TLS support
 - May need to write with `esp-mqtt` or look at `commitc209803` for `PubSubClient`
+- If TLS works, then need to add to `docs/`
