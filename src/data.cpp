@@ -38,29 +38,31 @@ bool serializeAP(const AlertPayload& alert, char* buffer, size_t bufferSize) {
 }
 
 // helper to serialize HeartbeatPayload to string that can be parsed by backend as JSON
-bool serializeHB(const hbPayload& heartbeat, char* buffer, size_t bufferSize) {
+bool serializeHB(const HeartbeatPayload& heartbeat, char* buffer, size_t bufferSize) {
+  Serial.printf("Serializing Heartbeat Payload: noise_db = %.2f\n", heartbeat.noise_db);
+
   int len = snprintf(buffer, bufferSize,
-    "{\"worker_id\": 10,\"modulesOnline\":[%d,%d,%d],\"latitude\":%.6f,\"longitude\":%.6f,\"altitude\":%.2f,\"hdop\":%.2f,\"satellites\":%d,\"datetime\":\"%s\",\"resultant_acc\":%.2f,\"resultant_gyro\":%.2f,\"aqi_pm25_us\":%.2f,\"aqi_pm100_us\":%.2f,\"aqi_uba\":%.2f,\"noise_db\":%.2f}",
+    "{\"worker_id\": 10,\"modulesOnline\":[%d,%d],\"latitude\":%.6f,\"longitude\":%.6f,\"altitude\":%.2f,\"hdop\":%.2f,\"satellites\":%d,\"datetime\":\"%s\",\"resultant_acc\":%.2f,\"resultant_gyro\":%.2f,\"aqi_pm25_us\":%.2f,\"aqi_pm100_us\":%.2f,\"aqi_uba\":%.2f,\"noise_db\":%.2f}",
     // backend will handle modulesOnline and map to exactly what module is online using nodeID
     heartbeat.modulesOnline[0],
     heartbeat.modulesOnline[1],
-    heartbeat.modulesOnline[2],
     heartbeat.latitude,
     heartbeat.longitude,
     heartbeat.altitude,
-    heartbeat.hdop,
+    (double)heartbeat.hdop,
     heartbeat.satellites,
     heartbeat.dateTime,
-    heartbeat.resultant_acc,
-    heartbeat.resultant_gyro,
-    heartbeat.aqi_pm25_us,
-    heartbeat.aqi_pm100_us,
-    heartbeat.aqi_uba,
-    heartbeat.noise_db);
+    (double)heartbeat.resultant_acc,
+    (double)heartbeat.resultant_gyro,
+    (double)heartbeat.aqi_pm25_us,
+    (double)heartbeat.aqi_pm100_us,
+    (double)heartbeat.aqi_uba,
+    (double)heartbeat.noise_db);
 
   if (len >= bufferSize) return false;
   return true;
 }
+
 
 
 bool isCollectionTimedOut(hbCollection& collection) {
@@ -80,16 +82,25 @@ void aggHeartbeatResponse(NodeID nodeId, const twai_message_t& msg, hbCollection
 
   // parse CAN data based on node type 
   if (nodeId == NODE_AIR_Q) {
-    airQualityHB_t* aqData = (airQualityHB_t*)msg.data;
-    collection.payload.aqi_pm25_us = static_cast<float>(aqData->pm25_aqi);
-    collection.payload.aqi_pm100_us = static_cast<float>(aqData->pm100_aqi);
-    collection.payload.aqi_uba = static_cast<float>(aqData->aqi_uba);
+    airQualityHB_t aqData;
+    memcpy(&aqData, msg.data, sizeof(aqData));
+
+    collection.payload.aqi_pm25_us = static_cast<float>(aqData.pm25_aqi);
+    collection.payload.aqi_pm100_us = static_cast<float>(aqData.pm100_aqi);
+    collection.payload.aqi_uba = static_cast<float>(aqData.aqi_uba);
     // mark which node responded 
     collection.payload.modulesOnline[0] = static_cast<u_int8_t>(nodeId);
   }
   else if (nodeId == NODE_NOISE) {
-    noiseHB_t* noiseData = (noiseHB_t*)msg.data;
-    collection.payload.noise_db = static_cast<float>(noiseData->noise_db);
+    noiseHB_t noiseData;
+    memcpy(&noiseData, msg.data, sizeof(noiseHB_t));
+    Serial.printf("Extracted noise_db uint16_t: %d\n", noiseData.noise_db);
+
+    // convert to float for heartbeat payload
+    collection.payload.noise_db = static_cast<float>(noiseData.noise_db);
+    Serial.printf("Assigned noise_db float: %.2f\n", collection.payload.noise_db);
+    Serial.printf("DEBUG: noise_db address = %p, value = %.2f\n", &collection.payload.noise_db, collection.payload.noise_db);
+    Serial.printf("DEBUG: hbPayload size = %d bytes\n", sizeof(HeartbeatPayload));
     // mark which node responded 
     collection.payload.modulesOnline[1] = static_cast<u_int8_t>(nodeId);
 
@@ -109,4 +120,21 @@ void printAlertPayload(const AlertPayload& alert) {
     Serial.printf(" Acc: %.2f m\n", alert.resultant_acc);
     Serial.printf(" Gyro: %.2f m\n", alert.resultant_gyro);
 
+}
+
+// populates GPS fields of AlertPayload from latest gpsQueue data
+void attachGPSToAlert(AlertPayload &alert) {
+  gpsData latestGpsData; 
+  if (xQueuePeek(gpsQueue, &latestGpsData, 0) == pdTRUE) {
+    alert.latitude  = latestGpsData.latitude;
+    alert.longitude = latestGpsData.longitude;
+    alert.altitude  = latestGpsData.altitude;
+    strncpy(alert.dateTime, latestGpsData.dateTime, sizeof(alert.dateTime));
+
+  } else {
+    alert.latitude  = 0.0;
+    alert.longitude = 0.0;
+    alert.altitude  = 0.0;
+    strncpy(alert.dateTime, "Invalid", sizeof(alert.dateTime));
+  }
 }

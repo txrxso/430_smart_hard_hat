@@ -5,6 +5,7 @@
 #ifdef ARDUINO_ARCH_ESP32
   #include <Arduino.h>
   #include <driver/twai.h>
+  #include <freertos/queue.h>
 #else 
   #include <stdint.h>
   #include <stddef.h>
@@ -24,6 +25,8 @@
 SHOULD NEVER receive the following:
 - HEARTBEAT_REQUEST (this is an OUTGOING ONLY message from the gateway to peripheral modules)
 */
+
+extern QueueHandle_t gpsQueue; 
 
 // ======================
 // IMU and GPS
@@ -141,7 +144,7 @@ typedef struct {
 
 
 // stuff for heartbeat payload for MQTT - keep everything as low memory as possible (e.g., double rather than float)
-struct hbPayload {
+struct HeartbeatPayload {
     // array of NodeIDs that responded
     uint8_t modulesOnline[MAX_NODES_RECV] = {0}; // (0 = no module)
 
@@ -179,17 +182,18 @@ struct hbPayload {
 struct hbCollection {
     bool isCollecting; 
     TickType_t startTime; 
-    hbPayload payload; // payload.modulesOnline gives array of NodeIDs that responded
+    HeartbeatPayload payload; // payload.modulesOnline gives array of NodeIDs that responded
 };
 
 
 // helpers related to data structs
 const char* alertTypeToString(AlertType type);
 bool serializeAP(const AlertPayload& alert, char* buffer, size_t bufferSize);
-bool serializeHB(const hbPayload& heartbeat, char* buffer, size_t bufferSize);
+bool serializeHB(const HeartbeatPayload& heartbeat, char* buffer, size_t bufferSize);
 // helpers dealing with heartbeat collection state
 bool isCollectionTimedOut(hbCollection& collection);
 void aggHeartbeatResponse(NodeID nodeId, const twai_message_t& msg, hbCollection& collection);
+void attachGPSToAlert(AlertPayload &alert);
 
 // helpers for printing
 void printAlertPayload(const AlertPayload& alert);
