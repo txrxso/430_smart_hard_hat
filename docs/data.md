@@ -21,7 +21,7 @@ This is what is sent to the MQTT broker.
 | Key | Example | 
 |----------|------------|
 | `worker_id`  | 10 |
-| `modulesOnline` | [0,1] |
+| `modulesOnline` | [`nodeId`, `nodeId`] <br> If this is `[0,0]`, then this means no peripheral modules are 'online'. Air quality module (0x03) and Noise module (0x02) online means `[3,2]`. |
 | `latitude` | 49.2827 |
 | `longitude` | -123.1207 |
 | `altitude` | 15 |
