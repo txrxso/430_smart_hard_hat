@@ -10,6 +10,7 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 
 // MQTT
 #include <WiFi.h>
+#include <WiFiClientSecure.h> // for TLS
 #include <PubSubClient.h>
 #include "wifi_config.h"  // config and credentials
 #include "mqtt_config.h"
@@ -19,6 +20,7 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 #include "button.h"
 #include "can.h"
 #include "debug.h"
+#include "certs.h"
 
 #include "esp_wifi.h"
 
@@ -32,12 +34,18 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 #include <freertos/queue.h>
 
 // define DEBUG mode to print stuff
+#define ENABLE_TLS 1
 #define HEARTBEAT_INTERVAL_MIN 0.5 // set to 5 minutes // in minutes
 #define MAX_IMMEDIATE_MQTT_RETRIES 3
 #define MQTT_RETRY_DELAY_MS 100
 
 // for maintaining connection state
+#if ENABLE_TLS 
+WiFiClientSecure wifiClient;
+#else 
 WiFiClient wifiClient;
+#endif 
+
 PubSubClient mqttClient(wifiClient);
 
 TaskHandle_t imuTaskHandle = NULL;
@@ -63,7 +71,7 @@ hbCollection hbCollectState = {
   .isCollecting = false,
 }; // start with isCollecting = true so requests can begin immediately
 
-bool connectToMQTT() {
+bool connectToMQTT(bool enableTLS = ENABLE_TLS) {
   #if MQTT_DEBUG
   // Serial.println("Attempting MQTT connection...");
   // print debug info
@@ -76,9 +84,15 @@ bool connectToMQTT() {
   // Serial.print(":");
   // Serial.println(MQTT_PORT_HIVEMQ_PUBLIC);
   #endif 
+  bool success = false;
 
-  bool success = mqttClient.connect("ESP32Client");
-
+  if (enableTLS) {
+    success = mqttClient.connect("ESP32Client", MQTT_USER, MQTT_PSWD);
+  }
+  else{
+    success = mqttClient.connect("ESP32Client");
+  }
+  
   #if MQTT_DEBUG
   if (success) {
     Serial.println("MQTT connected successfully on first attempt");
@@ -731,6 +745,11 @@ void setup(void) {
   connectToWifi(); // use this for home network but not for WPA-2 Enterprise
   // connectToWifiEnterprise();
 
+  // configure TLS if enabled
+  #if ENABLE_TLS
+  wifiClient.setCACert(root_ca);
+  #endif
+
   // configure power management
   esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
 
@@ -752,7 +771,12 @@ void setup(void) {
 
   // set up mqtt 
   mqttClient.setBufferSize(512);
+  #if ENABLE_TLS
+  mqttClient.setServer(MQTT_SERVER_HIVEMQ_PRIVATE, MQTT_PORT_HIVEMQ_TLS);
+  #else
   mqttClient.setServer(MQTT_SERVER_HIVEMQ_PUBLIC, MQTT_PORT_HIVEMQ_PUBLIC);
+  #endif
+
 
   connectToMQTT();
 
