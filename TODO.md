@@ -6,12 +6,13 @@
 
 
 ## 1. CAN Functionality <a name="can_func"></a>
-### 1.1 **Handling Incoming Alerts** 
+### 1.1 **Handling Incoming Alerts** [DONE]
 Items: 
 - GATEWAY SENDS ACK AFTER AGGREGATING INTO ALERT PAYLOAD [DONE]
-- Handling alert notification and parsing
-- Aggregating payload and pushing to `alertPublishQueue`
-- Signalling `mqttPublishTask`
+- Handling alert notification and parsing (for noise only) [DONE]
+- Aggregating payload and pushing to `alertPublishQueue`[DONE]
+- Signalling `mqttPublishTask`[DONE]
+- **ONLY THE NOISE NODE SENDS AN ALERT FOR NOW BECAUSE 100-120 DB IS CLOSE TO INSTANT DAMAGE**. This would just be the CAN ID indicating it is an alert from the noise module and it is an `ALERT_NOTIFICATION`. The only data in the frame would be the noise level in decibels measured.
 
 Scope: 
 `void incomingCanTask()`
@@ -23,15 +24,18 @@ Scope:
 
 Once manual clear condition detected: 
 1. Send manual clear alert to outgoing CAN messages to notify other modules.The peripheral modules should then set a 1 minute timer where it ignores subsequent alerts.
+- Need to push into `peripheralCanOutgoingQueue` 
+- Put all `twai_transmit()` (ie. outgoing CAN stuff) under `incomingCanTask()` responsibility 
+- so that one task now checks for queue of outgoing to peripheral + monitoring for incoming CAN messages
+
 2. Signal MQTT publish for manual clear to notify dashboard. This 'alert' should be pushed into the `alertPublishQueue`.
 
 ## 2. MQTT Functionality <a name="mqtt_func"></a>
 
-
 ### 2.1 **Packaging Incoming Alerts into JSON Payloads**
+Verify that serializeAlert function works.
 
-
-### 2.2 **Changing `modulesOnline`**
+### 2.2 **Changing `modulesOnline`** [DONE]
 0 = offline
 1 = online
 
