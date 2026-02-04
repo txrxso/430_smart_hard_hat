@@ -10,7 +10,7 @@ import yaml
 DURATION_HRS = 1 
 
 # Load test config 
-with open('config.yaml', 'r') as f:
+with open('test_configs/mqtt_broker.yaml', 'r') as f:
     config = yaml.safe_load(f)
     BROKER = config['private_broker']['host']
     PORT = config['private_broker']['port']
@@ -99,7 +99,11 @@ if __name__ == "__main__":
     client = mqtt.Client()
     client.on_connect = on_connect
     client.on_message = on_mqtt_msg
-    client.connect(BROKER, PORT)
+
+    if 'USERNAME' in globals() and 'PASSWORD' in globals():
+        client.username_pw_set(USERNAME, PASSWORD)
+
+    client.connect(BROKER, PORT, keepalive=300)
 
     # start background thread
     client.loop_start() 
