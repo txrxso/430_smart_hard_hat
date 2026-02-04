@@ -4,13 +4,22 @@ import json, os, time
 from datetime import datetime, timedelta
 import pandas as pd 
 from typing import List, Dict
+import yaml
 
 # CONFIGURATION
-BROKER = "broker.hivemq.com"
-PORT = 1883
-HB_TOPIC = 'igen430/shh/heartbeats/workerA'
-ALERTS_TOPIC = 'igen430/shh/alerts/workerA'
 DURATION_HRS = 1 
+
+# Load test config 
+with open('config.yaml', 'r') as f:
+    config = yaml.safe_load(f)
+    BROKER = config['private_broker']['host']
+    PORT = config['private_broker']['port']
+    HB_TOPIC = config['topics']['heartbeats']
+    ALERTS_TOPIC = config['topics']['alerts']
+
+    if 'private_broker' in config and 'username' in config['private_broker']:
+        USERNAME = config['private_broker']['username']
+        PASSWORD = config['private_broker']['password']
 
 # store latency measurements
 hb_latency_data = []
