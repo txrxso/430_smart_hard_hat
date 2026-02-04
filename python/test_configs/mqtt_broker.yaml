@@ -1,0 +1,13 @@
+public_broker:
+  host: broker.hivemq.com
+  port: 1883
+
+private_broker:
+  host: fe26426fbe64463790fc2792777c8189.s1.eu.hivemq.cloud
+  port: 8883
+  username: 
+  password: 
+
+topics:
+  heartbeats: igen430/shh/heartbeats/workerA
+  alerts: igen430/shh/alerts/workerA
