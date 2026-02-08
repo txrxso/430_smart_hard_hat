@@ -21,6 +21,7 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 #include "can.h"
 #include "debug.h"
 #include "certs.h"
+#include "data_structs.h"
 
 #include "esp_wifi.h"
 
@@ -658,14 +659,18 @@ void manualAlertTask(void * parameter) {
 
 // TASK: GPS Monitoring and Sampling
 void gpsTask(void * parameter) {
+  static gpsData lastValidGPSData; // to store last valid GPS data for fallback
+  static TimeSync timesync = {
+    .lastDateTime = "",
+    .lastSyncTicks = 0,
+    .hasValidSync = false
+  };
   gpsData geodata; 
 
   while (true) { 
     // read gps data and always store most recent value 
     if (gpsRead(geodata)) { 
       #if GPS_DEBUG 
-      Serial.print("Read GPS data.");
-
       if (gpsHasFix()) { 
         Serial.printf("Lat: %.6f\n", geodata.latitude);
         Serial.printf("Lon: %.6f\n", geodata.longitude);
@@ -678,19 +683,55 @@ void gpsTask(void * parameter) {
       }
       #endif 
 
-      // push data to queue for other tasks to use
-      xQueueOverwrite(gpsQueue, &geodata);
+      // always update location first (we decide later if datetime is valid or needs to be modified using ticks)
+      lastValidGPSData.latitude = geodata.latitude;
+      lastValidGPSData.longitude = geodata.longitude;
+      lastValidGPSData.altitude = geodata.altitude;
+      lastValidGPSData.hdop = geodata.hdop;
+      lastValidGPSData.satellites = geodata.satellites;
 
-      #if GPS_DEBUG
-      Serial.println("GPS data pushed to queue.");
-      #endif
+      // 1. check if GPS datetime is valid and changed 
+      if (strcmp(geodata.dateTime, "Invalid") != 0 && 
+          strcmp(geodata.dateTime, timesync.lastDateTime) != 0) { 
+      
+          // update baseline
+          strncpy(timesync.lastDateTime, geodata.dateTime, sizeof(timesync.lastDateTime) - 1);
+          timesync.lastDateTime[sizeof(timesync.lastDateTime) - 1] = '\0';
+          timesync.lastSyncTicks = xTaskGetTickCount();
+          timesync.hasValidSync = true;
+
+          #if GPS_DEBUG
+          Serial.printf("GPS sync updated: %s\n", timesync.lastDateTime);
+          #endif
+          
+      }
 
     }
 
+    // GPS timeout or failure
     else { 
       // no data received within timeout 
       Serial.println("No GPS data received within timeout.");
+
+      // 3. if GPS timeout/failure (no valid data), then use tick offset with last known GPS datetime to estimate current datetime
+      // only if at least 1 valid GPS datetime in the past
     }
+
+    // compute enhanced dt 
+    if (timesync.hasValidSync) { 
+      computeDateTime(lastValidGPSData.dateTime, sizeof(lastValidGPSData.dateTime), 
+                      timesync.lastDateTime, timesync.lastSyncTicks);               
+    } else {
+      // never synced yet
+      snprintf(lastValidGPSData.dateTime, sizeof(lastValidGPSData.dateTime), "No GPS Sync");
+    }
+
+    // always push to queue 
+    xQueueOverwrite(gpsQueue, &lastValidGPSData);
+    #if GPS_DEBUG
+    Serial.printf("Pushed GPS data to queue. Lat: %.6f, Lon: %.6f, DateTime: %s\n", 
+                  lastValidGPSData.latitude, lastValidGPSData.longitude, lastValidGPSData.dateTime);
+    #endif
 
     vTaskDelay(pdMS_TO_TICKS(1500)); // sample every 1.5 seconds
 
