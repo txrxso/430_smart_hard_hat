@@ -89,38 +89,41 @@ bool gpsRead(gpsData &data) {
   // timeout after 1 second if no new data 
 
   unsigned long start = millis();
+  bool gotUpdate = false;
 
   while (true) {
     while (gpsSerial.available() > 0) {
       gps.encode(gpsSerial.read());
     }
 
-    // check if location was updated 
-    if (gps.location.isUpdated()) {
+    // check if valid location data
+    if (gps.location.isValid()) {
       // update values
       data.latitude = gps.location.lat();
       data.longitude = gps.location.lng();
       data.altitude = gps.altitude.meters();
       data.hdop = gps.hdop.value() / 100.0;
       data.satellites = gps.satellites.value();
+      gotUpdate = true;
+    }
 
-      if (gps.date.isValid() && gps.time.isValid()) {
-        snprintf(data.dateTime, sizeof(data.dateTime),
-                 "%04d/%02d/%02d,%02d:%02d:%02d",
-                 gps.date.year(),
-                 gps.date.month(),
-                 gps.date.day(),
-                 gps.time.hour(),
-                 gps.time.minute(),
-                 gps.time.second());
-      } 
+    // check if valid time data
+    if (gps.date.isValid() && gps.time.isValid()) {
+      snprintf(data.dateTime, sizeof(data.dateTime),
+                "%04d/%02d/%02d,%02d:%02d:%02d",
+                gps.date.year(),
+                gps.date.month(),
+                gps.date.day(),
+                gps.time.hour(),
+                gps.time.minute(),
+                gps.time.second());
+      gotUpdate = true;
+    } else {
+      snprintf(data.dateTime, sizeof(data.dateTime), "Invalid");
+    }
 
-      else {
-        snprintf(data.dateTime, sizeof(data.dateTime), "Invalid");
-      }
-
+    if (gotUpdate) {
       return true; // exit early if updated
-
     }
 
     if (millis() - start > 1000) {
