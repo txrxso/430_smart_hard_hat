@@ -45,6 +45,7 @@ enum class SafetyEvent {
 void setupGPS();
 bool gpsHasFix(); 
 bool gpsRead(gpsData &data);
+void computeDateTime(char* buffer, size_t bufferSize, const char* baseDateTime, TickType_t baseSyncTicks); // helper to compute date/time string from GPS data for timestamping
 bool setupIMU();
 void readIMU(imuData &data);
 SafetyEvent analyzeIMUData(const imuData &data); // use const for read only, reference (no copy)
