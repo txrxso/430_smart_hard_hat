@@ -9,6 +9,6 @@
 
 
 // flags for mocks
-#define MOCK_GPS 1 
+#define MOCK_GPS 0
 
 #endif
