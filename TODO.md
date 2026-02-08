@@ -3,6 +3,7 @@
 ## Table of Contents 
 1. [CAN Functionality](#can_func)
 2. [MQTT Functionality](#mqtt_func)
+3. [GPS Functionality](#gps_func)
 
 
 ## 1. CAN Functionality <a name="can_func"></a>
@@ -55,9 +56,24 @@ Conditions for something to be `online`:
 - Each heartbeat collection cycle is a fresh snapshot, so if a node didn't respond that cycle, we consider it `offline` 
 - Need to add deterministic indexing so `[1,0]` if AIR QUALITY data included and `[0,1]` if only NOISE data included, but `[1,1]` if both responded. 
 
-### 2.3 **MQTT PUBLISHES INCONSISTENT -> MQTT BROKER CUSTOMIZATION**
+### 2.3 **MQTT PUBLISHES INCONSISTENT -> MQTT BROKER CUSTOMIZATION** [DONE]
 Right now: 
 - HIVEMQ Public Broker on Port 1883 sometimes not that stable
 - Try to set up TLS support with `PubSubClient`; though that library for sure doesn't include TLS support
 - May need to write with `esp-mqtt` or look at `commitc209803` for `PubSubClient`
 - If TLS works, then need to add to `docs/`
+
+## 3. GPS Functionality <a name="gps_func"></a>
+## 3.1 GPS Time Syncing (Timestamping Fallback)
+- Want to improve from current design right now, where only depends on the datetime in `gpsQueue`
+- Main constraint: GPS module has 1 second granularity, so if we query at T+0.2 vs. T+0.7 seconds, it returns the same datetime string even if 500 ms elapsed.
+
+Hierarchy of timestamp priority:
+1. If fresh GPS sync (datetime changed), update baseline.
+2. If GPS location updated but time unchanged -> use `millis()` offset from last sync.
+3. If GPS timeout/failure -> continue using `millis()` offset from last sync
+
+Always use datetime string, but only add elapsed seconds if required.
+
+## 3.2 Location Loss 
+- If GPS location data invalid, we can use an estimate of the circumference for possible search and rescue (e.g., using 3 acc and 3 gyro)
