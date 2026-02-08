@@ -46,6 +46,12 @@ struct NoiseData {
     String dateTime;
 };
 
+struct TimeSync {
+    char lastDateTime[20]; // last date/time string from GPS in format "YYYY/MM/DD,HH:MM:SS"
+    TickType_t lastSyncTicks;
+    bool hasValidSync; // whether we have a valid time sync from GPS
+}; // adding this for graceful degradation of GPS time sync in case of signal loss, so we can still have somewhat accurate timestamps for data even without GPS fix
+
 
 const CoreData EMPTY_COREDATA = {
     0.0, 0.0, 0.0,  // accelX, accelY, accelZ

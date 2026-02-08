@@ -70,8 +70,8 @@ Right now:
 
 Hierarchy of timestamp priority:
 1. If fresh GPS sync (datetime changed), update baseline.
-2. If GPS location updated but time unchanged -> use `millis()` offset from last sync.
-3. If GPS timeout/failure -> continue using `millis()` offset from last sync
+2. If GPS location updated but time unchanged -> use ticks offset from last sync.
+3. If GPS timeout/failure -> continue using ticks offset from last sync
 
 Always use datetime string, but only add elapsed seconds if required.
 
