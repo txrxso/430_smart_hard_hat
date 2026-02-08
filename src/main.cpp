@@ -660,11 +660,7 @@ void manualAlertTask(void * parameter) {
 // TASK: GPS Monitoring and Sampling
 void gpsTask(void * parameter) {
   static gpsData lastValidGPSData; // to store last valid GPS data for fallback
-  static TimeSync timesync = {
-    .lastDateTime = "",
-    .lastSyncTicks = 0,
-    .hasValidSync = false
-  };
+  static TimeSync timesync = {"", 0, false};
   gpsData geodata; 
 
   while (true) { 
