@@ -27,6 +27,46 @@ bool gpsHasFix() {
   return gps.location.isValid() && gps.satellites.value() >= 0;
 }
 
+
+void computeDateTime(char* buffer, size_t bufferSize, const char* baseDateTime,  TickType_t baseSyncTicks) {
+  // helper function to compute datetime with millis() offset
+  // calculate elapsed ticks since last GPS sync
+  TickType_t elapsedTicks = xTaskGetTickCount() - baseSyncTicks;
+
+  // convert to seconds - tick duration = 1/ configTickRate_HZ seconds
+  unsigned long elapsedSeconds = elapsedTicks / configTICK_RATE_HZ;
+
+  if (elapsedSeconds == 0) {
+    // if no time has elapsed, return base GPS datetime
+    strncpy(buffer, baseDateTime, bufferSize - 1);
+    buffer[bufferSize - 1] = '\0'; // ensure null termination
+    return;
+  }
+
+  // parse baseDateTime "YYYY/MM/DD,HH:MM:SS" and add on the time, then format back to string
+  int year, month, day, hour, minute, second;
+  int parsed = sscanf(baseDateTime, "%d/%d/%d,%d:%d:%d", 
+                      &year, &month, &day, &hour, &minute, &second);
+
+  if (parsed == 6) { 
+    // add elapsed seconds to the parsed time 
+    second += elapsedSeconds;
+
+    // handle time rollover
+    minute += second / 60;
+    second = second % 60;
+    hour += minute / 60;
+    minute = minute % 60; 
+    day += hour / 24;
+    hour = hour % 24;
+
+    // format back to string
+    snprintf(buffer, bufferSize, "%04d/%02d/%02d,%02d:%02d:%02d",
+             year, month, day, hour, minute, second);
+  } 
+
+}
+
 #if MOCK_GPS 
 bool gpsRead(gpsData &data) {
   // mock gps, return placeholder values
