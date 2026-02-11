@@ -36,7 +36,7 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 
 // define DEBUG mode to print stuff
 #define ENABLE_TLS 1
-#define HEARTBEAT_INTERVAL_MIN 0.5 // set to 5 minutes // in minutes
+#define HEARTBEAT_INTERVAL_MIN 5 // set to 5 minutes // in minutes
 #define MAX_IMMEDIATE_MQTT_RETRIES 3
 #define MQTT_RETRY_DELAY_MS 100
 
