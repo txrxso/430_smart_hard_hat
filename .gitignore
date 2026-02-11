@@ -21,3 +21,5 @@ test/*
 # python env 
 python/430_test_env
 python/test_configs/mqtt_broker.yaml
+
+*/*.kml
