@@ -1,7 +1,7 @@
 # automated latency testing script (subscribe to same topic, and aggregate stats)
 import paho.mqtt.client as mqtt
-import json, os, time 
-from datetime import datetime, timedelta
+import json, os, time, csv, sys, signal
+from datetime import datetime, timedelta, timezone
 import pandas as pd 
 from typing import List, Dict
 import yaml
@@ -9,119 +9,130 @@ import yaml
 # CONFIGURATION
 DURATION_HRS = 1 
 
-# Load test config 
-with open('test_configs/mqtt_broker.yaml', 'r') as f:
-    config = yaml.safe_load(f)
-    BROKER = config['private_broker']['host']
-    PORT = config['private_broker']['port']
-    HB_TOPIC = config['topics']['heartbeats']
-    ALERTS_TOPIC = config['topics']['alerts']
 
-    if 'private_broker' in config and 'username' in config['private_broker']:
-        USERNAME = config['private_broker']['username']
-        PASSWORD = config['private_broker']['password']
+def load_config() -> Dict:
+    # Load test config 
+    with open('test_configs/mqtt_broker.yaml', 'r') as f:
+        config = yaml.safe_load(f)
+        broker = config['private_broker']['host']
+        port = config['private_broker']['port']
+        hb_topic = config['topics']['heartbeats']
+        alert_topic = config['topics']['alerts']
 
-# store latency measurements
-hb_latency_data = []
-alert_latency_data = []
+        if 'private_broker' in config and 'username' in config['private_broker']:
+            username = config['private_broker']['username']
+            password = config['private_broker']['password']
 
-# global timing
-start_time = datetime.now()
-end_time = start_time + timedelta(hours=DURATION_HRS)
-os.makedirs('data', exist_ok=True)
-
-def parse_gps_timestamp(dt_str: str) -> datetime: 
-    # convert to datetime
-    # because payload has the format: "datetime":"2024/01/19,10:30:45" 
-    try: 
-        dt = datetime.strptime(dt_str, "%Y/%m/%d,%H:%M:%S")
-        # convert to unix timestamp (ms)
-        return int(dt.timestamp() * 1000)
-    except Exception as e: 
-        print(f"Error parsing timestamp: {e}")
-        return None
+    return broker, port, hb_topic, alert_topic, username, password
 
 
-def export_to_csv(hb_latency_data: List[Dict], alert_latency_data: List[Dict]): 
-    # only export if not null
-    start_str = start_time.strftime("%Y%m%d_%H%M%S")
-    end_str = end_time.strftime("%Y%m%d_%H%M%S")
-    hb_fp = f"heartbeat_latency_{start_str}_to_{end_str}.csv"
-    alert_fp = f"alert_latency_{start_str}_to_{end_str}.csv"
 
-    if hb_latency_data: 
-        print("Exporting HB latency data.")
-        hb_df = pd.DataFrame(hb_latency_data)
-        hb_df.to_csv(os.path.join('data', hb_fp), index=False)
+def log_latency(host, port, hb_topic, alert_topic, username=None, password=None): 
+    # set up 
+    test_data_dir = os.path.join(os.path.dirname(__file__), "data")
+    os.makedirs(test_data_dir, exist_ok=True)
 
-    if alert_latency_data:
-        print("Exporting alert latency data.")
-        a_df = pd.DataFrame(alert_latency_data)
-        a_df.to_csv(os.path.join('data', alert_fp), index=False)
+    hb_out_file = os.path.join(test_data_dir, f"heartbeat_latency_{start_time.strftime('%Y%m%d_%H%M%S')}_to_{end_time.strftime('%Y%m%d_%H%M%S')}.csv")
+    alert_out_file = os.path.join(test_data_dir, f"alert_latency_{start_time.strftime('%Y%m%d_%H%M%S')}_to_{end_time.strftime('%Y%m%d_%H%M%S')}.csv")
+
+    with open(hb_out_file, 'w', newline='') as hb_csv, open(alert_out_file, 'w', newline='') as alert_csv:
+        hb_writer = csv.DictWriter(hb_csv, fieldnames=['index', 'latency_s', 'arrival_time', 'sent_gps_time', 'payload'])
+        hb_writer.writeheader()
+        
+        alert_writer = csv.DictWriter(alert_csv, fieldnames=['index', 'latency_s', 'arrival_time', 'sent_gps_time', 'payload'])
+        alert_writer.writeheader()
+
+         # counters for indexing
+        hb_count = [0]  
+        alert_count = [0]
+
+        def handle_exit(_signum, _frame):
+            print("Exiting and saving data...")
+            hb_csv.close()
+            alert_csv.close()
+            client.disconnect()
+            sys.exit(0)
+
+        signal.signal(signal.SIGINT, handle_exit)
+
+        client = mqtt.Client()
+
+        if username and password:
+            client.username_pw_set(username, password)
+            client.tls_set()
+
+        def on_connect(client, userdata, flags, rc):
+            if rc == 0: 
+                print(f"Connected to MQTT Broker: {broker}:{port}")
+                # subscribe to the topics
+                client.subscribe(hb_topic)
+                client.subscribe(alert_topic)
+            else: 
+                print(f"Failed to connect; return code: {rc}")
 
 
-def on_mqtt_msg(client, data, msg: mqtt.MQTTMessage):
-    arrival_t = int(time.time() * 1000) # current time in ms
-    payload = json.loads(msg.payload)
+        def on_message(client, userdata, msg):
+            arrival_t = int(datetime.now(timezone.utc).timestamp()) # current time in seconds
+            payload = msg.payload.decode('utf-8')
+            data = json.loads(payload)
 
-    # get GPS timestamp 
-    gateway_gps_ts = payload.get('datetime') 
-    unix_ts = parse_gps_timestamp(gateway_gps_ts)
+            print(f"\n=== Message Received ===")
+            print(f"Topic: {msg.topic}")
+            print(f"Raw Payload: {payload}") 
 
-    # calculate latency 
-    latency = arrival_t - unix_ts
-
-    # store measurement 
-    measurement = {
-        'timestamp': datetime.now().isoformat(),
-        'latency_ms': latency,
-        'topic': msg.topic
-    }
-
-    if msg.topic == HB_TOPIC:
-        hb_latency_data.append(measurement)
-    elif msg.topic == ALERTS_TOPIC: 
-        alert_latency_data.append(measurement)
-
+            # GPS timestamp
+            gateway_gps_ts = data.get('datetime') 
+            dt = datetime.strptime(gateway_gps_ts, "%Y/%m/%d,%H:%M:%S")
+            dt = dt.replace(tzinfo=timezone.utc) # ensure it's timezone-aware in UTC
+            gps_ts = int(dt.timestamp()) # convert to seconds
             
-def on_connect(client, data, flags, rc):
-    if rc == 0: 
-        print(f"Connected to MQTT Broker: {BROKER}:{PORT}")
-        # subscribe to the topics
-        client.subscribe(HB_TOPIC)
-        client.subscribe(ALERTS_TOPIC)
-    else: 
-        print(f"Failed to connect; return code: {rc}")
+            # latency
+            latency = arrival_t - gps_ts
+
+            # depending on topic, log to diff file
+            row_data = {
+                'latency_s': latency,
+                'arrival_time': arrival_t,
+                'sent_gps_time': gps_ts,
+                'payload': payload
+            }
+
+            if msg.topic == hb_topic:
+                row_data['index'] = hb_count[0]
+                hb_writer.writerow(row_data)
+                hb_csv.flush()  # ensure data is written
+                hb_count[0] += 1
+            elif msg.topic == alert_topic:
+                row_data['index'] = alert_count[0]
+                alert_writer.writerow(row_data)
+                alert_csv.flush()  # ensure data is written
+                alert_count[0] += 1
+
+            # Check if test duration has elapsed
+            if datetime.now() >= end_time:
+                print(f"\nTest duration complete. Collected {hb_count[0]} heartbeats and {alert_count[0]} alerts.")
+                handle_exit(None, None)
+
+        client.on_connect = on_connect
+        client.on_message = on_message
+        print(f"Connecting to {host}:{port}...")
+        client.connect(host, port, keepalive=300)
+        client.loop_forever()
+
+    return 0
 
 
 if __name__ == "__main__":
-    # set up 
-    client = mqtt.Client()
-    client.on_connect = on_connect
-    client.on_message = on_mqtt_msg
+    # store latency measurements
+    hb_latency_data = []
+    alert_latency_data = []
 
-    if 'USERNAME' in globals() and 'PASSWORD' in globals():
-        client.username_pw_set(USERNAME, PASSWORD)
+    # global timing
+    start_time = datetime.now()
+    end_time = start_time + timedelta(hours=DURATION_HRS)
+    os.makedirs('data', exist_ok=True)
 
-    client.connect(BROKER, PORT, keepalive=300)
 
-    # start background thread
-    client.loop_start() 
-
-    print(f"Collecting data for {DURATION_HRS} hours.")
-    try: 
-        time.sleep(DURATION_HRS * 3600)
-
-    except KeyboardInterrupt:
-        print("Interrupted by user.")
-        print("Exporting all existing data to csv.")
-        export_to_csv(hb_latency_data, alert_latency_data)
-
-    # after sleep completes
-    print(f"Stopping collection.")
-    client.loop_stop()
-    client.disconnect()
-
-    # export all data to .csv 
-    print("Exporting to CSV")
-    export_to_csv(hb_latency_data, alert_latency_data)
+    # get config from yaml
+    broker, port, hb_topic, alert_topic, username, password = load_config()
+    log_latency(broker, port, hb_topic, alert_topic, username, password)
