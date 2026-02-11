@@ -12,7 +12,7 @@ DURATION_HRS = 1
 
 def load_config() -> Dict:
     # Load test config 
-    with open('test_configs/mqtt_broker.yaml', 'r') as f:
+    with open(os.path.join(os.path.dirname(__file__), 'test_configs/mqtt_broker.yaml'), 'r') as f:
         config = yaml.safe_load(f)
         broker = config['private_broker']['host']
         port = config['private_broker']['port']
@@ -82,6 +82,11 @@ def log_latency(host, port, hb_topic, alert_topic, username=None, password=None)
 
             # GPS timestamp
             gateway_gps_ts = data.get('datetime') 
+
+            if not gateway_gps_ts or gateway_gps_ts in ['2000/00/00,00:00:00', '0000/00/00,00:00:00']:
+                print(f"Invalid GPS timestamp: {gateway_gps_ts}. Skipping latency calculation.")
+                return
+            
             dt = datetime.strptime(gateway_gps_ts, "%Y/%m/%d,%H:%M:%S")
             dt = dt.replace(tzinfo=timezone.utc) # ensure it's timezone-aware in UTC
             gps_ts = int(dt.timestamp()) # convert to seconds
