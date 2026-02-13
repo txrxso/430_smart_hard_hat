@@ -28,6 +28,9 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 // CAN 
 #include <driver/twai.h>
 
+// non-volatile storage
+#include <Preferences.h>
+
 // FreeRTOS
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -36,6 +39,7 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 
 // define DEBUG mode to print stuff
 #define ENABLE_TLS 1
+#define NVS_SAVE_PERIOD 5 // in minutes, how often to save GPS coordinates to NVS
 #define HEARTBEAT_INTERVAL_MIN 5 // set to 5 minutes // in minutes
 #define MAX_IMMEDIATE_MQTT_RETRIES 3
 #define MQTT_RETRY_DELAY_MS 100
@@ -66,6 +70,9 @@ EventGroupHandle_t mqttPublishEventGroup = NULL;
 EventGroupHandle_t mqttPublishHealthGroup = NULL;
 
 SemaphoreHandle_t hbStateMutex = xSemaphoreCreateMutex(); // global scope
+
+// non-volatile storage
+Preferences gpsPreferences; // to store last known GPS data for fallback when no fix; persists across power cycles
 
 // global heartbeat collection state (shared bewteen tasks)
 hbCollection hbCollectState = {
@@ -663,6 +670,14 @@ void gpsTask(void * parameter) {
   static TimeSync timesync = {"", 0, false};
   gpsData geodata; 
 
+  // load last known location from NVS on boot by default
+  lastValidGPSData.latitude = gpsPreferences.getDouble("latitude", 0.0);
+  lastValidGPSData.longitude = gpsPreferences.getDouble("longitude", 0.0);
+
+  // track time for saving to NVS periodically)
+  TickType_t lastNVSSaveTime = xTaskGetTickCount();
+  const TickType_t nvsSaveInterval = pdMS_TO_TICKS(NVS_SAVE_PERIOD * 60 * 1000); // convert minutes to ticks
+
   while (true) { 
     // read gps data and always store most recent value 
     if (gpsRead(geodata)) { 
@@ -729,6 +744,23 @@ void gpsTask(void * parameter) {
                   lastValidGPSData.latitude, lastValidGPSData.longitude, lastValidGPSData.dateTime);
     #endif
 
+    // save to NVS depending on time interval (only if have a valid fix to save)
+    if (xTaskGetTickCount() - lastNVSSaveTime >= nvsSaveInterval && gpsHasFix()) {
+      #if GPS_DEBUG
+      TickType_t writeStart = xTaskGetTickCount();
+      #endif
+      gpsPreferences.putDouble("latitude", lastValidGPSData.latitude);
+      gpsPreferences.putDouble("longitude", lastValidGPSData.longitude);
+      lastNVSSaveTime = xTaskGetTickCount();
+
+      #if GPS_DEBUG
+      Serial.println("Saved GPS coordinates to NVS.");
+      TickType_t writeEnd = xTaskGetTickCount();
+      unsigned long writeDurationMs = pdTICKS_TO_MS(writeEnd - writeStart);
+      Serial.printf("NVS write took %lu ms.\n", writeDurationMs); // see how long it takes b/c NVS write can be slow/blocking
+      #endif
+    }
+
     vTaskDelay(pdMS_TO_TICKS(1500)); // sample every 1.5 seconds
 
   }
@@ -750,6 +782,16 @@ void setup(void) {
       delay(10);
     }
   }
+
+  // setup NVS for GPS coordinates
+  gpsPreferences.begin("gps-storage", false); // namespace "gps-storage", read/write mode
+  
+  // load last known location on boot
+  gpsData lastSavedGPS; 
+  lastSavedGPS.latitude = gpsPreferences.getDouble("latitude", 0.0);
+  lastSavedGPS.longitude = gpsPreferences.getDouble("longitude", 0.0);
+  
+
   setupGPS();
 
   // initialize CAN
