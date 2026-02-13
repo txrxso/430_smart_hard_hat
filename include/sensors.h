@@ -33,9 +33,9 @@ extern EventGroupHandle_t gpsEventGroup;
 
 #define FREEFALL_THRESHOLD_G 0.3
 #define FREEFALL_DURATION_MS 100 // ms
-#define MEDIUM_IMPACT_THRESHOLD_G 7.0
+#define MEDIUM_IMPACT_THRESHOLD_G 4.0
 #define HEAVY_IMPACT_THRESHOLD_G 10.0
-#define ROTATION_THRESHOLD_DEG_S 250.0
+#define ROTATION_THRESHOLD_DEG_S 500
 #define WINDOW_SIZE 3 // number of samples to consider for moving average; keep small
 #define SUSTAINED_THRESHOLD 2 // number of consecutive samples exceeding threshold to consider valid event
 
@@ -44,7 +44,7 @@ enum class SafetyEvent {
   FREEFALL,
   MEDIUM_IMPACT,
   HEAVY_IMPACT,
-  HIGH_ROTATION
+  HIGH_ROTATION_AND_ACC // high rotation and high acceleration is more indicative of a safety event
 };
 
 void setupGPS();
