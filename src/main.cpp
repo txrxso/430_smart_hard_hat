@@ -16,6 +16,7 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 #include "mqtt_config.h"
 
 #include "sensors.h"
+#include "gps.h"
 #include "data.h"
 #include "button.h"
 #include "can.h"
@@ -28,9 +29,6 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 // CAN 
 #include <driver/twai.h>
 
-// non-volatile storage
-#include <Preferences.h>
-
 // FreeRTOS
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -39,7 +37,6 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 
 // define DEBUG mode to print stuff
 #define ENABLE_TLS 1
-#define NVS_SAVE_PERIOD 5 // in minutes, how often to save GPS coordinates to NVS
 #define HEARTBEAT_INTERVAL_MIN 5 // set to 5 minutes // in minutes
 #define MAX_IMMEDIATE_MQTT_RETRIES 3
 #define MQTT_RETRY_DELAY_MS 100
@@ -51,6 +48,7 @@ WiFiClientSecure wifiClient;
 WiFiClient wifiClient;
 #endif 
 
+GPSTaskManager::State gpsState = {}; // global state for GPS task manager
 PubSubClient mqttClient(wifiClient);
 
 TaskHandle_t imuTaskHandle = NULL;
@@ -71,10 +69,6 @@ EventGroupHandle_t mqttPublishHealthGroup = NULL;
 EventGroupHandle_t gpsEventGroup = NULL;
 
 SemaphoreHandle_t hbStateMutex = xSemaphoreCreateMutex(); // global scope
-
-// non-volatile storage
-Preferences gpsPreferences; // to store last known GPS data for fallback when no fix; persists across power cycles
-
 // global heartbeat collection state (shared bewteen tasks)
 hbCollection hbCollectState = {
   .isCollecting = false,
@@ -667,105 +661,9 @@ void manualAlertTask(void * parameter) {
 
 // TASK: GPS Monitoring and Sampling
 void gpsTask(void * parameter) {
-  static gpsData lastValidGPSData; // to store last valid GPS data for fallback
-  static TimeSync timesync = {"", 0, false};
-  gpsData geodata; 
-
-  // load last known location from NVS on boot by default
-  lastValidGPSData.latitude = gpsPreferences.getDouble("latitude", 0.0);
-  lastValidGPSData.longitude = gpsPreferences.getDouble("longitude", 0.0);
-
-  // track time for saving to NVS periodically)
-  TickType_t lastNVSSaveTime = xTaskGetTickCount();
-  const TickType_t nvsSaveInterval = pdMS_TO_TICKS(NVS_SAVE_PERIOD * 60 * 1000); // convert minutes to ticks
-
-  while (true) { 
-    // read gps data and always store most recent value 
-    if (gpsRead(geodata)) { 
-      #if GPS_DEBUG 
-      if (gpsHasFix()) { 
-        Serial.printf("Lat: %.6f\n", geodata.latitude);
-        Serial.printf("Lon: %.6f\n", geodata.longitude);
-        Serial.printf("Alt: %.2f m\n", geodata.altitude);
-        Serial.printf("HDOP: %.2f\n", geodata.hdop);
-        Serial.printf("Satellites: %d\n", geodata.satellites);
-        Serial.printf("DateTime: %s\n", geodata.dateTime);
-      } else { 
-        Serial.println(" No valid GPS fix.");
-      }
-      #endif 
-
-      // always update location first (we decide later if datetime is valid or needs to be modified using ticks)
-      lastValidGPSData.latitude = geodata.latitude;
-      lastValidGPSData.longitude = geodata.longitude;
-      lastValidGPSData.altitude = geodata.altitude;
-      lastValidGPSData.hdop = geodata.hdop;
-      lastValidGPSData.satellites = geodata.satellites;
-
-      // 1. check if GPS datetime is valid and changed 
-      if (strcmp(geodata.dateTime, "Invalid") != 0 && 
-          strcmp(geodata.dateTime, timesync.lastDateTime) != 0) { 
-      
-          // update baseline
-          strncpy(timesync.lastDateTime, geodata.dateTime, sizeof(timesync.lastDateTime) - 1);
-          timesync.lastDateTime[sizeof(timesync.lastDateTime) - 1] = '\0';
-          timesync.lastSyncTicks = xTaskGetTickCount();
-          timesync.hasValidSync = true;
-
-          #if GPS_DEBUG
-          Serial.printf("GPS sync updated: %s\n", timesync.lastDateTime);
-          #endif
-          
-      }
-
-    }
-
-    // GPS timeout or failure
-    else { 
-      // no data received within timeout 
-      Serial.println("No GPS data received within timeout.");
-
-      // 3. if GPS timeout/failure (no valid data), then use tick offset with last known GPS datetime to estimate current datetime
-      // only if at least 1 valid GPS datetime in the past
-    }
-
-    // compute enhanced dt 
-    if (timesync.hasValidSync) { 
-      computeDateTime(lastValidGPSData.dateTime, sizeof(lastValidGPSData.dateTime), 
-                      timesync.lastDateTime, timesync.lastSyncTicks);               
-    } else {
-      // never synced yet
-      snprintf(lastValidGPSData.dateTime, sizeof(lastValidGPSData.dateTime), "No GPS Sync");
-    }
-
-    // always push to queue 
-    xQueueOverwrite(gpsQueue, &lastValidGPSData);
-    #if GPS_DEBUG
-    Serial.printf("Pushed GPS data to queue. Lat: %.6f, Lon: %.6f, DateTime: %s\n", 
-                  lastValidGPSData.latitude, lastValidGPSData.longitude, lastValidGPSData.dateTime);
-    #endif
-
-    // save to NVS depending on time interval (only if have a valid fix to save)
-    if (xTaskGetTickCount() - lastNVSSaveTime >= nvsSaveInterval && gpsHasFix()) {
-      #if GPS_DEBUG
-      TickType_t writeStart = xTaskGetTickCount();
-      #endif
-      gpsPreferences.putDouble("latitude", lastValidGPSData.latitude);
-      gpsPreferences.putDouble("longitude", lastValidGPSData.longitude);
-      lastNVSSaveTime = xTaskGetTickCount();
-
-      #if GPS_DEBUG
-      Serial.println("Saved GPS coordinates to NVS.");
-      TickType_t writeEnd = xTaskGetTickCount();
-      unsigned long writeDurationMs = pdTICKS_TO_MS(writeEnd - writeStart);
-      Serial.printf("NVS write took %lu ms.\n", writeDurationMs); // see how long it takes b/c NVS write can be slow/blocking
-      #endif
-    }
-
-    vTaskDelay(pdMS_TO_TICKS(1500)); // sample every 1.5 seconds
-
-  }
-
+    GPSTaskManager::State* state = (GPSTaskManager::State*)parameter;
+    GPSTaskManager::init(*state, gpsQueue, gpsEventGroup);
+    GPSTaskManager::run(*state);
 }
 
 
@@ -778,21 +676,13 @@ void setup(void) {
     delay(10); 
 
   if (!setupIMU()) {
-    Serial.println("IMU setup failed. Stopping.");
     while (1) {
+      Serial.println("IMU setup failed. Stopping.");
       delay(10);
     }
   }
 
-  // setup NVS for GPS coordinates
-  gpsPreferences.begin("gps-storage", false); // namespace "gps-storage", read/write mode
-  
-  // load last known location on boot
-  gpsData lastSavedGPS; 
-  lastSavedGPS.latitude = gpsPreferences.getDouble("latitude", 0.0);
-  lastSavedGPS.longitude = gpsPreferences.getDouble("longitude", 0.0);
-  
-
+  // hardware setup
   setupGPS();
 
   // initialize CAN
@@ -809,17 +699,6 @@ void setup(void) {
   alertPublishQueue = xQueueCreate(20, sizeof(AlertPayload));
   heartbeatPublishQueue = xQueueCreate(10, sizeof(HeartbeatPayload));
   peripheralCanOutgoingQueue = xQueueCreate(10, sizeof(twai_message_t));
-
-  #if MQTT_DEBUG 
-  if (mqttPublishEventGroup == NULL || gpsQueue == NULL || imuQueue == NULL) { 
-    Serial.println("Failed to create event group or queues.");
-    while(1);
-  }
-  if (mqttPublishHealthGroup == NULL) { 
-    Serial.println("Failed to create mqttPublishHealthGroup.");
-    while(1);
-  }
-  #endif 
 
   // setup wifi as client
   WiFi.mode(WIFI_STA); 
@@ -840,14 +719,8 @@ void setup(void) {
   if (ret == ESP_OK) { 
     conf.sta.listen_interval = 10;
     esp_wifi_set_config(WIFI_IF_STA, &conf);
-    #if MQTT_DEBUG
-    Serial.println("WiFi modem sleep enabled (PS_MAX_MODEM) with listen interval 10");
-    #endif
   } else {
-    #if MQTT_DEBUG 
-    Serial.printf("Failed to get wifi config: %d\n", ret);
     while(1);
-    #endif
   }
 
   // set up mqtt 
@@ -919,7 +792,7 @@ void setup(void) {
     gpsTask,
     "GPSTask",
     4096,
-    NULL,
+    &gpsState, // pass pointer to GPS task manager state
     1,
     &gpsTaskHandle,
     0
