@@ -20,3 +20,6 @@
 
 - Verified functionality for `alerts` and `heartbeats` with MQTT Explorer
 - Added `docs/certificates.md` for steps on retrieving the broker root CA cert. 
+
+## February 12th, 2026
+- Added support for saving GPS coordinates to NVS periodically
