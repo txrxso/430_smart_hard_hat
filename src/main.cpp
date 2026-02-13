@@ -68,6 +68,7 @@ QueueHandle_t peripheralCanOutgoingQueue; // outgoing CAN messages
 
 EventGroupHandle_t mqttPublishEventGroup = NULL;
 EventGroupHandle_t mqttPublishHealthGroup = NULL;
+EventGroupHandle_t gpsEventGroup = NULL;
 
 SemaphoreHandle_t hbStateMutex = xSemaphoreCreateMutex(); // global scope
 
@@ -801,6 +802,7 @@ void setup(void) {
 
   mqttPublishEventGroup = xEventGroupCreate();
   mqttPublishHealthGroup = xEventGroupCreate();
+  gpsEventGroup = xEventGroupCreate();
   // create queues for sharing data between threads/tasks 
   gpsQueue = xQueueCreate(1, sizeof(gpsData));
   imuQueue = xQueueCreate(1, sizeof(imuData));
