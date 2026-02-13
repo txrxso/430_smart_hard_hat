@@ -20,6 +20,11 @@
 // baud rate
 #define GPS_BAUD 9600
 
+// event group for fresh GPS read requests
+extern EventGroupHandle_t gpsEventGroup;
+#define GPS_READ_REQUEST_BIT (1 << 0) 
+#define GPS_READ_SUCCESS_BIT (1 << 1)
+
 /* 
 1. Freefall detection (<0.3G for 100 ms)
 2. Impact detection (> X G) 
