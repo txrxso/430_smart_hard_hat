@@ -190,20 +190,25 @@ SafetyEvent analyzeIMUData(const imuData &data) {
 
   // count samples exceeding thresholds
   int heavyImpactCount = 0;
-  int highRotationCount = 0;
+  // int highRotationCount = 0;
+  int highAccRotationCount = 0; // combined condition for high rotation and high acceleration
   int mediumImpactCount = 0;
   int freefallCount = 0;
 
   for (int i = 0; i < WINDOW_SIZE; i++) {
+    
     if (accelWindow[i] >= HEAVY_IMPACT_THRESHOLD_G) {
       heavyImpactCount++;
     }
     else if (accelWindow[i] >= MEDIUM_IMPACT_THRESHOLD_G) {
       mediumImpactCount++;
     }
-    if (gyroWindow[i] >= ROTATION_THRESHOLD_DEG_S) {
-      highRotationCount++;
+
+    // count samples with BOTH impact and rotation
+    if (accelWindow[i] >= MEDIUM_IMPACT_THRESHOLD_G && gyroWindow[i] >= ROTATION_THRESHOLD_DEG_S) {
+      highAccRotationCount++;
     }
+    
     if (accelWindow[i] <= FREEFALL_THRESHOLD_G) {
       freefallCount++;
     }
@@ -222,12 +227,11 @@ SafetyEvent analyzeIMUData(const imuData &data) {
     #endif
     return SafetyEvent::MEDIUM_IMPACT;
   }
-  else if (highRotationCount >= SUSTAINED_THRESHOLD) {
-    #if IMU_DEBUG == 1 
-    Serial.println("HIGH ROTATION.");
-    #endif
-    return SafetyEvent::HIGH_ROTATION;
+
+  else if (highAccRotationCount >= SUSTAINED_THRESHOLD) { 
+    return SafetyEvent::HIGH_ROTATION_AND_ACC;
   }
+
   else if (freefallCount >= SUSTAINED_THRESHOLD) {
     #if IMU_DEBUG == 1 
     Serial.println("FREEFALL.");
