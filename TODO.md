@@ -82,7 +82,7 @@ Always use datetime string, but only add elapsed seconds if required.
 - If GPS location data invalid, we can use an estimate of the circumference for possible search and rescue (e.g., using 3 acc and 3 gyro)
 
 
-## 3.3 GPS Last Known Location Saving
+## 3.3 GPS Last Known Location Saving [DONE]
 - Add last GPS location to non-volatile/flash (every 5 seconds) so it remembers even if powered OFF. Can at least give last known location until new data available.
 
 
