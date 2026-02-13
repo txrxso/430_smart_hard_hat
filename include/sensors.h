@@ -1,10 +1,8 @@
 #ifndef SENSORS_H
 #define SENSORS_H
 
-// for GPS
 #include <Arduino.h>
-#include <HardwareSerial.h>
-#include <TinyGPS++.h>
+
 // for IMU
 #include <Adafruit_MPU6050.h> 
 #include <Adafruit_Sensor.h>
@@ -12,18 +10,6 @@
 #include <math.h>
 #include "data.h"
 #include "debug.h"
-
-// UART pins
-#define RXD2 16 
-#define TXD2 17
-
-// baud rate
-#define GPS_BAUD 9600
-
-// event group for fresh GPS read requests
-extern EventGroupHandle_t gpsEventGroup;
-#define GPS_READ_REQUEST_BIT (1 << 0) 
-#define GPS_READ_SUCCESS_BIT (1 << 1)
 
 /* 
 1. Freefall detection (<0.3G for 100 ms)
@@ -47,10 +33,6 @@ enum class SafetyEvent {
   HIGH_ROTATION_AND_ACC // high rotation and high acceleration is more indicative of a safety event
 };
 
-void setupGPS();
-bool gpsHasFix(); 
-bool gpsRead(gpsData &data);
-void computeDateTime(char* buffer, size_t bufferSize, const char* baseDateTime, TickType_t baseSyncTicks); // helper to compute date/time string from GPS data for timestamping
 bool setupIMU();
 void readIMU(imuData &data);
 SafetyEvent analyzeIMUData(const imuData &data); // use const for read only, reference (no copy)
