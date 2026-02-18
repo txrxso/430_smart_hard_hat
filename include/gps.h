@@ -29,6 +29,14 @@ extern EventGroupHandle_t gpsEventGroup;
 // configuration
 #define NVS_SAVE_PERIOD 5 // in minutes, how often to save GPS coordinates to NVS
 
+
+struct TimeSync {
+    char lastDateTime[20]; // last date/time string from GPS in format "YYYY/MM/DD,HH:MM:SS"
+    TickType_t lastSyncTicks;
+    bool hasValidSync; // whether we have a valid time sync from GPS
+}; // adding this for graceful degradation of GPS time sync in case of signal loss, so we can still have somewhat accurate timestamps for data even without GPS fix
+
+
 // low-level helpers
 void setupGPS();
 bool gpsHasFix(); 
