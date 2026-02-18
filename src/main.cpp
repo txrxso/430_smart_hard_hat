@@ -15,14 +15,13 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 #include "wifi_config.h"  // config and credentials
 #include "mqtt_config.h"
 
-#include "sensors.h"
+#include "imu.h"
 #include "gps.h"
 #include "data.h"
 #include "button.h"
 #include "can.h"
 #include "debug.h"
 #include "certs.h"
-#include "data_structs.h"
 
 #include "esp_wifi.h"
 
@@ -275,8 +274,7 @@ void incomingCanTask(void * parameter) {
             alertToSend.noise_db = static_cast<double>(noiseAlertFrame->noise_db); // alertToSend.noise_db
           } 
 
-          // attach GPS data 
-          attachGPSToAlert(alertToSend);
+          attachGPSToAlert(alertToSend, gpsEventGroup, gpsQueue); 
 
           // forward alert to mqttPublishTask via alertPublishQueue
           if (alertPublishQueue != NULL && xQueueSend(alertPublishQueue, &alertToSend, pdMS_TO_TICKS(5)) == pdTRUE) {
@@ -295,19 +293,12 @@ void incomingCanTask(void * parameter) {
   
     } // if ESP_OK = status
 
-    else if (status == ESP_ERR_TIMEOUT) {
-      #if CAN_DEBUG
-      // Serial.println("No CAN msg recv'd within timeout.");
-      #endif 
-    }
-
+    #if CAN_DEBUG 
     else {
-      #if CAN_DEBUG 
       Serial.println("Error recv. CAN msg.");
       Serial.println(status);
-      #endif
-
     }
+    #endif
 
 
     // finalize the heartbeat collection 
@@ -333,17 +324,11 @@ void incomingCanTask(void * parameter) {
           snapshot.resultant_acc = temp_imu.resultant_acc;
           snapshot.resultant_gyro = temp_imu.resultant_gyro;
         }
-        gpsData temp_gps; 
-        if (xQueuePeek(gpsQueue, &temp_gps, 0) == pdTRUE) {
-          snapshot.latitude = temp_gps.latitude;
-          snapshot.longitude = temp_gps.longitude;
-          snapshot.altitude = temp_gps.altitude;
-          snapshot.hdop = temp_gps.hdop;
-          snapshot.satellites = temp_gps.satellites;
-          strncpy(snapshot.dateTime, temp_gps.dateTime, sizeof(snapshot.dateTime) - 1);
-          snapshot.dateTime[sizeof(snapshot.dateTime) - 1] = '\0';
-        }
 
+        // this will just peek latest GPS data for now since are not event-driven 
+        // - TO DO: make event-driven in future for better accuracy
+        attachGPSToHB(snapshot, gpsEventGroup, gpsQueue); 
+        
         // 5. send to publish queue
         Serial.printf("DEBUG: Before queue send, snapshot.noise_db = %.2f\n", snapshot.noise_db);
         if (xQueueSend(heartbeatPublishQueue, &snapshot, pdMS_TO_TICKS(10)) == pdTRUE) {  // TO DO: add retry in case can't add to QUEUE.
@@ -546,7 +531,7 @@ void imuTask(void * parameter) {
         // set alert type
         alertToSend.event = FALL_IMPACT; 
         
-        attachGPSToAlert(alertToSend);
+        attachGPSToAlert(alertToSend, gpsEventGroup, gpsQueue);
         
         // populate IMU measurements using imuData.float resultant_acc and resultant_gyro
         alertToSend.resultant_acc= data.resultant_acc;
