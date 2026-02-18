@@ -6,25 +6,12 @@
   #include <Arduino.h>
   #include <driver/twai.h>
   #include <freertos/queue.h>
+  #include "gps_events.h"
 #else 
   #include <stdint.h>
   #include <stddef.h>
 #endif
 
-/* Scenarios on how this node handles CAN communication: 
-1. When an ALERT_NOTIFICATION is received from a peripheral module:
-   - The gateway node processes the alert, formats it into an AlertPayload structure, and pushes it to the alertPublishQueue for MQTT publishing.
-   - The gateway sends an ALERT_ACK back to the peripheral module to confirm receipt.
-2. When a HEARTBEAT_RESPONESE is received from a peripheral module:
-   - The gateway node aggregates the heartbeat data from all peripheral modules.
-   - This aggregated data is included in the periodic heartbeat messages sent via MQTT.
-3. When the gateway node task knows the manualAlertTask() has signaled a manual clear:
-   - The gateway formats the corresponding AlertPayload and pushes it to the alertPublishQueue for MQTT publishing.
-   - The gateway sends an ALERT_CLEARED message via CAN to all peripheral modules to inform them of the manual alert or clear action so they disregard any exceeding threshold samples for the duration of the cancel timer.
-
-SHOULD NEVER receive the following:
-- HEARTBEAT_REQUEST (this is an OUTGOING ONLY message from the gateway to peripheral modules)
-*/
 
 extern QueueHandle_t gpsQueue; 
 
@@ -193,7 +180,8 @@ bool serializeHB(const HeartbeatPayload& heartbeat, char* buffer, size_t bufferS
 // helpers dealing with heartbeat collection state
 bool isCollectionTimedOut(hbCollection& collection);
 void aggHeartbeatResponse(NodeID nodeId, const twai_message_t& msg, hbCollection& collection);
-void attachGPSToAlert(AlertPayload &alert);
+void attachGPSToAlert(AlertPayload &alert, EventGroupHandle_t gpsEventGroup, QueueHandle_t gpsQueue);
+void attachGPSToHB(HeartbeatPayload &hb, EventGroupHandle_t gpsEventGroup, QueueHandle_t gpsQueue);
 
 // helpers for printing
 void printAlertPayload(const AlertPayload& alert);

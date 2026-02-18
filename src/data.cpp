@@ -122,19 +122,74 @@ void printAlertPayload(const AlertPayload& alert) {
 
 }
 
-// populates GPS fields of AlertPayload from latest gpsQueue data
-void attachGPSToAlert(AlertPayload &alert) {
+// ==================================================================
+// internal fallback: populate GPS fields from what is only in queue 
+// as fallback (not event-driven)
+// ==================================================================
+static void populateGPSAlertFromQueue(AlertPayload &alert, QueueHandle_t gpsQueue) {
   gpsData latestGpsData; 
   if (xQueuePeek(gpsQueue, &latestGpsData, 0) == pdTRUE) {
     alert.latitude  = latestGpsData.latitude;
     alert.longitude = latestGpsData.longitude;
     alert.altitude  = latestGpsData.altitude;
     strncpy(alert.dateTime, latestGpsData.dateTime, sizeof(alert.dateTime));
-
   } else {
     alert.latitude  = 0.0;
     alert.longitude = 0.0;
     alert.altitude  = 0.0;
     strncpy(alert.dateTime, "Invalid", sizeof(alert.dateTime));
   }
+}
+
+static void populateGPSHBFromQueue(HeartbeatPayload &hb, QueueHandle_t gpsQueue) {
+  gpsData latestGpsData;
+  if (xQueuePeek(gpsQueue, &latestGpsData, 0) == pdTRUE) {
+    hb.latitude   = latestGpsData.latitude;
+    hb.longitude  = latestGpsData.longitude;
+    hb.altitude   = latestGpsData.altitude;
+    hb.hdop       = latestGpsData.hdop;
+    hb.satellites = latestGpsData.satellites;
+    strncpy(hb.dateTime, latestGpsData.dateTime, sizeof(hb.dateTime) - 1);
+    hb.dateTime[sizeof(hb.dateTime) - 1] = '\0';
+  } else {
+    hb.latitude   = 0.0;
+    hb.longitude  = 0.0;
+    hb.altitude   = 0.0;
+    hb.hdop       = 0.0; // indicate invalid
+    hb.satellites = 0;
+    strncpy(hb.dateTime, "Invalid", sizeof(hb.dateTime) - 1);
+    hb.dateTime[sizeof(hb.dateTime) - 1] = '\0';
+  }
+
+}
+
+// ==================================================================
+// public helpers to request fresh GPS then attach to alert/heartbeat
+// ==================================================================
+
+// populates GPS fields of AlertPayload from latest gpsQueue data
+void attachGPSToAlert(AlertPayload &alert, EventGroupHandle_t gpsEventGroup, QueueHandle_t gpsQueue) {
+  xEventGroupClearBits(gpsEventGroup, GPS_READ_SUCCESS_BIT);
+  xEventGroupSetBits(gpsEventGroup, GPS_READ_REQUEST_BIT); // signal gpsTask to take a reading
+
+  EventBits_t result = xEventGroupWaitBits(
+    gpsEventGroup,
+    GPS_READ_SUCCESS_BIT,
+    pdTRUE, pdFALSE,
+    pdMS_TO_TICKS(600)
+  );
+
+  if (result & GPS_READ_SUCCESS_BIT) {
+    Serial.println("Successfully got fresh GPS data for alert.");
+  } else {
+    // timed out - no fix, etc. - fallback
+    Serial.println("Using fallback data.");
+  }
+  populateGPSAlertFromQueue(alert, gpsQueue);
+
+}
+
+void attachGPSToHB(HeartbeatPayload &hb, EventGroupHandle_t gpsEventGroup, QueueHandle_t gpsQueue) {
+  // are not event-driven - just peek is fine for now
+  populateGPSHBFromQueue(hb, gpsQueue);
 }

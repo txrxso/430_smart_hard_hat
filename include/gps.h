@@ -8,11 +8,11 @@
 #include <Preferences.h> 
 
 #include <freertos/FreeRTOS.h>
-#include <freertos/event_groups.h>
 #include <freertos/queue.h> 
 
 #include "data.h"
 #include "debug.h"
+#include "gps_events.h"
 
 // UART pins
 #define RXD2 16 
@@ -20,11 +20,6 @@
 
 // baud rate
 #define GPS_BAUD 9600
-
-// event group for fresh GPS read requests
-extern EventGroupHandle_t gpsEventGroup;
-#define GPS_READ_REQUEST_BIT (1 << 0) 
-#define GPS_READ_SUCCESS_BIT (1 << 1)
 
 // configuration
 #define NVS_SAVE_PERIOD 5 // in minutes, how often to save GPS coordinates to NVS
