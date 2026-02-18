@@ -36,6 +36,9 @@ extern EventGroupHandle_t gpsEventGroup;
 #define GPS_READ_SUCCESS_BIT (1 << 1)
 ```
 
+Tasks can request a GPS read by setting the bit `GPS_READ_REQUEST_BIT`.
+If the bit is set, both request and success bits are cleared, a fresh GPS read is attempted, and if successful, it processes the data and signals back via the `GPS_READ_SUCCESS_BIT`.
+
 
 ### Data Structures
 `gpsData` is the primary container for storing our gps data from the readings.
