@@ -6,8 +6,6 @@ const char* MQTT_SERVER_HIVEMQ_PUBLIC = "broker.hivemq.com"; //"test.mosquitto.o
 const int MQTT_PORT_HIVEMQ_PUBLIC = 1883; 
 const char* MQTT_TOPIC_ALERTS = "igen430/shh/alerts/workerA";
 const char* MQTT_TOPIC_HEARTBEATS = "igen430/shh/heartbeats/workerA";
-const unsigned long PUBLISH_INTERVAL = 500;
-const unsigned long RECONNECT_INTERVAL = 2000;
 
 // TLS + HIVE MQ PRIVATE BROKER
 const char* MQTT_SERVER_HIVEMQ_PRIVATE = "fe26426fbe64463790fc2792777c8189.s1.eu.hivemq.cloud";
