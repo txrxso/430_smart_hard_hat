@@ -39,7 +39,6 @@ bool serializeAP(const AlertPayload& alert, char* buffer, size_t bufferSize) {
 
 // helper to serialize HeartbeatPayload to string that can be parsed by backend as JSON
 bool serializeHB(const HeartbeatPayload& heartbeat, char* buffer, size_t bufferSize) {
-  Serial.printf("Serializing Heartbeat Payload: noise_db = %.2f\n", heartbeat.noise_db);
 
   int len = snprintf(buffer, bufferSize,
     "{\"worker_id\": 10,\"modulesOnline\":[%d,%d],\"latitude\":%.6f,\"longitude\":%.6f,\"altitude\":%.2f,\"hdop\":%.2f,\"satellites\":%d,\"datetime\":\"%s\",\"resultant_acc\":%.2f,\"resultant_gyro\":%.2f,\"aqi_pm25_us\":%.2f,\"aqi_pm100_us\":%.2f,\"aqi_uba\":%.2f,\"noise_db\":%.2f}",
