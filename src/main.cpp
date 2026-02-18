@@ -36,7 +36,7 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 
 // define DEBUG mode to print stuff
 #define ENABLE_TLS 1
-#define HEARTBEAT_INTERVAL_MIN 5 // set to 5 minutes // in minutes
+#define HEARTBEAT_INTERVAL_MIN 5  // set to 5 minutes // in minutes
 #define MAX_IMMEDIATE_MQTT_RETRIES 3
 #define MQTT_RETRY_DELAY_MS 100
 
@@ -310,7 +310,6 @@ void incomingCanTask(void * parameter) {
         // Use memcpy instead of assignment to avoid alignment issues with double fields
         HeartbeatPayload snapshot;
         memcpy(&snapshot, &hbCollectState.payload, sizeof(HeartbeatPayload));
-        Serial.printf("DEBUG: Right after snapshot copy, noise_db = %.2f\n", snapshot.noise_db);
         
         // 2. Immediately reset global state so Request Task is free to start a new cycle
         hbCollectState.isCollecting = false;
@@ -330,7 +329,6 @@ void incomingCanTask(void * parameter) {
         attachGPSToHB(snapshot, gpsEventGroup, gpsQueue); 
         
         // 5. send to publish queue
-        Serial.printf("DEBUG: Before queue send, snapshot.noise_db = %.2f\n", snapshot.noise_db);
         if (xQueueSend(heartbeatPublishQueue, &snapshot, pdMS_TO_TICKS(10)) == pdTRUE) {  // TO DO: add retry in case can't add to QUEUE.
           xEventGroupSetBits(mqttPublishEventGroup, PUBLISH_HEARTBEAT_BIT);
         } 
@@ -469,7 +467,6 @@ void mqttPublishTask(void * parameter) {
       
       // process all hbs in queue 
       while (heartbeatPublishQueue != NULL && xQueueReceive(heartbeatPublishQueue, &hbToSend, 0) == pdTRUE) {
-        Serial.printf("DEBUG: After queue receive, hbToSend.noise_db = %.2f\n", hbToSend.noise_db);
         // prepare JSON payload
         if (serializeHB(hbToSend, heartbeatPayloadBuffer, sizeof(heartbeatPayloadBuffer))) {
           bool success = mqttClient.publish(MQTT_TOPIC_HEARTBEATS, heartbeatPayloadBuffer);
