@@ -1,14 +1,16 @@
 #include "wifi_config.h"
 
 void connectToWifi() {
-    
+    int attempts = 0;
     WiFi.begin(HOTSPOT_SSID, HOTSPOT_PSWD);
+    // WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, IPAddress(8,8,8,8));
     while (WiFi.status() != WL_CONNECTED) {
-        delay(1000);
+        delay(500);
         Serial.println("Connecting to Wifi...");
         Serial.println(WiFi.status());
     }
 }
+
 
 
 void connectToWifiEnterprise() {
