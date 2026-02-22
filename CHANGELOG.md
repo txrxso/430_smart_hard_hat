@@ -23,3 +23,6 @@
 
 ## February 12th, 2026
 - Added support for saving GPS coordinates to NVS periodically
+
+## February 18th, 2026
+- Refactored GPS code to include features from TODO.md
