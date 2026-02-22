@@ -7,7 +7,7 @@ from typing import List, Dict
 import yaml
 
 # CONFIGURATION
-DURATION_HRS = 1 
+DURATION_HRS = 2
 
 
 def load_config() -> Dict:
@@ -81,7 +81,13 @@ def log_latency(host, port, hb_topic, alert_topic, username=None, password=None)
             print(f"Raw Payload: {payload}") 
 
             # GPS timestamp
-            gateway_gps_ts = data.get('datetime') 
+            gateway_gps_ts = data.get("datetime", "Invalid")
+
+            if gateway_gps_ts == "Invalid":
+                print("Skipping message: no GPS fix yet")
+                return  # or continue, depending on your structure
+
+            dt = datetime.strptime(gateway_gps_ts, "%Y/%m/%d,%H:%M:%S")
 
             if not gateway_gps_ts or gateway_gps_ts in ['2000/00/00,00:00:00', '0000/00/00,00:00:00']:
                 print(f"Invalid GPS timestamp: {gateway_gps_ts}. Skipping latency calculation.")
