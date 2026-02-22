@@ -132,6 +132,26 @@ bool gpsRead(gpsData &data) {
 // GPS Task Manager Implementation
 // =======================================
 namespace GPSTaskManager {
+    // helper: decide what datetime to push to queue 
+    static void updateQueue(State& s) {
+        // if every synced with GPS time, compute interpolated datetime
+        if (s.timesync.hasValidSync) {
+            computeDateTime(s.lastValidGPS.dateTime, sizeof(s.lastValidGPS.dateTime), 
+                            s.timesync.lastDateTime, s.timesync.lastSyncTicks);
+            
+        } else {
+            // if never synced with GPS, we say no GPS sync available
+            snprintf(s.lastValidGPS.dateTime, sizeof(s.lastValidGPS.dateTime), "No GPS Sync");
+        }
+
+        // push to queue (overwrites old data)
+        xQueueOverwrite(s.gpsQueue, &s.lastValidGPS); // push pointer to last valid GPS data in state to queue for others to read
+
+        #if GPS_DEBUG 
+        Serial.printf("GPS queue updated: (%.6f, %.6f) at %s\n", s.lastValidGPS.latitude, s.lastValidGPS.longitude, s.lastValidGPS.dateTime);
+        #endif
+    } //updateQueue()
+    
     void init (State& s, QueueHandle_t gpsQueue, EventGroupHandle_t gpsEventGroup) {
             
         // open NVS storage namespace (read/write)
@@ -192,26 +212,6 @@ namespace GPSTaskManager {
         }
 
     } // processData()
-
-    // helper: decide what datetime to push to queue 
-    static void updateQueue(State& s) {
-        // if every synced with GPS time, compute interpolated datetime
-        if (s.timesync.hasValidSync) {
-            computeDateTime(s.lastValidGPS.dateTime, sizeof(s.lastValidGPS.dateTime), 
-                            s.timesync.lastDateTime, s.timesync.lastSyncTicks);
-            
-        } else {
-            // if never synced with GPS, we say no GPS sync available
-            snprintf(s.lastValidGPS.dateTime, sizeof(s.lastValidGPS.dateTime), "No GPS Sync");
-        }
-
-        // push to queue (overwrites old data)
-        xQueueOverwrite(s.gpsQueue, &s.lastValidGPS); // push pointer to last valid GPS data in state to queue for others to read
-
-        #if GPS_DEBUG 
-        Serial.printf("GPS queue updated: (%.6f, %.6f) at %s\n", s.lastValidGPS.latitude, s.lastValidGPS.longitude, s.lastValidGPS.dateTime);
-        #endif
-    } //updateQueue()
 
 
     // helper: handle event-triggered read 
