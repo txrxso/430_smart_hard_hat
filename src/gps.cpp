@@ -218,7 +218,7 @@ namespace GPSTaskManager {
         xEventGroupClearBits(s.gpsEventGroup, GPS_READ_REQUEST_BIT | GPS_READ_SUCCESS_BIT);
 
         // event-triggered request received, attempt to read 
-        gpsData fresh;
+        gpsData fresh = {};
         if (gpsRead(fresh)) {
             processData(s, fresh); // update state with fresh data
             updateQueue(s); // push to queue for others to read
@@ -235,7 +235,7 @@ namespace GPSTaskManager {
 
     // helper: handle periodic read 
     static void handlePeriodicRead(State& s) {
-        gpsData fresh;
+        gpsData fresh = {};
         if (gpsRead(fresh)) {
             processData(s, fresh); // update state with fresh data
         }

@@ -22,7 +22,7 @@
 #define GPS_BAUD 9600
 
 // configuration
-#define NVS_SAVE_PERIOD 5 // in minutes, how often to save GPS coordinates to NVS
+#define NVS_SAVE_PERIOD 1 // in minutes, how often to save GPS coordinates to NVS
 
 
 struct TimeSync {
