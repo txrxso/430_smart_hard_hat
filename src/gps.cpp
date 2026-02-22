@@ -162,12 +162,16 @@ namespace GPSTaskManager {
 
     // helper: process fresh GPS data and update state
     static void processData(State& s, const gpsData &newData) {
-        // copy all GPS values from fresh reading to the state's last valid cache
-        s.lastValidGPS.latitude = newData.latitude;
-        s.lastValidGPS.longitude = newData.longitude;
-        s.lastValidGPS.altitude = newData.altitude;
-        s.lastValidGPS.hdop = newData.hdop;
-        s.lastValidGPS.satellites = newData.satellites;
+        // only overwrite coordinates if got valid fix - if no fix, keep last known coordinates (could be from previous run or previous valid reading in this run)
+        if (newData.latitude != 0.0 && newData.longitude != 0.0) { 
+          // copy all GPS values from fresh reading to the state's last valid cache
+          s.lastValidGPS.latitude = newData.latitude;
+          s.lastValidGPS.longitude = newData.longitude;
+          s.lastValidGPS.altitude = newData.altitude;
+          s.lastValidGPS.hdop = newData.hdop;
+          s.lastValidGPS.satellites = newData.satellites;
+        }
+        
 
         // only update the timesync timestamp if the datetime is VALID 
         // and has changed from the last sync

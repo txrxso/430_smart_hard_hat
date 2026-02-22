@@ -78,7 +78,7 @@ Hierarchy of timestamp priority:
 
 Always use datetime string, but only add elapsed seconds if required.
 
-## 3.2 Location Loss (?)
+## 3.2 Location Loss (?) [LIMITATION/FUTURE WORK]
 - If GPS location data invalid, we can use an estimate of the circumference for possible search and rescue (e.g., using 3 acc and 3 gyro)
 
 
@@ -86,7 +86,7 @@ Always use datetime string, but only add elapsed seconds if required.
 - Add last GPS location to non-volatile/flash (every 5 seconds) so it remembers even if powered OFF. Can at least give last known location until new data available.
 
 
-## 3.4 GPS DateTime and Latency Problem
+## 3.4 GPS DateTime and Latency Problem [DONE]
 Issue:
 - Right now, GPS data in queue is 'whenever gpsTask() last happend to run last', and since we only peek from the queue, we don't have an accurate timestamp for when we need it (e.g., to publish a payload)
 - Getting on average 2-3 seconds (much longer than expected)
@@ -99,7 +99,7 @@ Fix:
 
 
 
-## 3.5 GPS Accuracy Problem 
+## 3.5 GPS Accuracy Problem [LIMITATION/FUTURE WORK]
 
 Issue: poor accuracy. <br>
 **Link to coordinates**: https://earth.google.com/earth/d/1DZ2xt-77K-BA04bCjhPHQHFmnlFWUwWW?usp=sharing 
