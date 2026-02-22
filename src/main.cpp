@@ -278,7 +278,7 @@ void incomingCanTask(void * parameter) {
 
           // forward alert to mqttPublishTask via alertPublishQueue
           if (alertPublishQueue != NULL && xQueueSend(alertPublishQueue, &alertToSend, pdMS_TO_TICKS(5)) == pdTRUE) {
-            #if CAN_DEBUG || MQTT_DEBUG
+            #if CAN_DEBUG == 2 || MQTT_DEBUG
             Serial.printf("Alert from noise node queued.");
             #endif
             
@@ -292,6 +292,14 @@ void incomingCanTask(void * parameter) {
       }
   
     } // if ESP_OK = status
+
+    else if (status == ESP_ERR_TIMEOUT) {
+      // no message received within timeout window, can use this block to check for heartbeat collection timeout if currently collecting
+      #if CAN_DEBUG == 2
+      Serial.println("No CAN message received within timeout.");
+      #endif
+
+    }
 
     #if CAN_DEBUG 
     else {
