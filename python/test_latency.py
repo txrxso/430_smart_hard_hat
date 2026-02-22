@@ -89,7 +89,7 @@ def log_latency(host, port, hb_topic, alert_topic, username=None, password=None)
 
             dt = datetime.strptime(gateway_gps_ts, "%Y/%m/%d,%H:%M:%S")
 
-            if not gateway_gps_ts or gateway_gps_ts in ['2000/00/00,00:00:00', '0000/00/00,00:00:00']:
+            if not gateway_gps_ts or gateway_gps_ts in ['2000/00/00,00:00:00', '0000/00/00,00:00:00', 'No GPS Sync']:
                 print(f"Invalid GPS timestamp: {gateway_gps_ts}. Skipping latency calculation.")
                 return
             
