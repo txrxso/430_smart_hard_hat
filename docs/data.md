@@ -14,6 +14,11 @@ This is what is sent to the MQTT broker.
 | `gyro` | 2.84 |
 | `noise_db` | 120 |
 
+### `event` strings
+`"NOISE_OVER_THRESHOLD"` <br>
+`"AIR_QUALITY_OVER_THRESHOLD"` <br>
+`"MANUAL_ALERT"` <br>
+`"MANUAL_CLEAR"` <br>
 
 # Heartbeat Payload 
 This is what is sent to the MQTT broker.
