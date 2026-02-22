@@ -1,22 +1,18 @@
 # 430_gateway_node
 
 ## Debug modes 
-Change the following flags in `include/sensors.h` : 
+Change the following flags in `include/debug.h` : 
 
 ```c++
-#define IMU_DEBUG 1 // turned on
-#define GPS_DEBUG 0 // turned off
+#define IMU_DEBUG 0 // 2 for more detailed IMU printing
+#define GPS_DEBUG 1
 #define MQTT_DEBUG 1 
-```
-
-Change the following flags in `include/can.h` : 
-
-```c++
-#define CAN_DEBUG 1
+#define CAN_DEBUG 1 // 2 to also print when no message received within timeout window, which can be useful for monitoring heartbeat timeouts, etc.
 #define HEARTBEAT_DEBUG 1
+
+// flags for mocks
+#define MOCK_GPS 0 // 0 = do not use mocks
 ```
-
-
 
 ## Add Required Wifi Credentials
 
