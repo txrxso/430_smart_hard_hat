@@ -158,6 +158,9 @@ namespace GPSTaskManager {
         Serial.printf("GPS init. Loaded from NVS: lat=%.6f, lon=%.6f\n", s.lastValidGPS.latitude, s.lastValidGPS.longitude);
         #endif
 
+        // pre-populate queue with NVS data so consumers don't get zeroes
+        updateQueue(s);
+
     } // void init()
 
     // helper: process fresh GPS data and update state
