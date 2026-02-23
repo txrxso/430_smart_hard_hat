@@ -1,27 +1,11 @@
-actual_coordinate = (49.260653, -123.250294)
+# UBC
+# actual_coordinate = (49.260653, -123.250294)
+# HOME TEST
+# actual_coordinate = (49.169572, -123.123531) 
 
-# UBC Macmillan Building Test
-test_coordinates = coordinates = [
-    (-123.250251, 49.260619),
-    (-123.250243, 49.260650),
-    (-123.250255, 49.260662),
-    (-123.250245, 49.260633),
-    (-123.250248, 49.260632),
-    (-123.250253, 49.260593),
-    (-123.250231, 49.260632),
-    (-123.250193, 49.260641),
-    (-123.250191, 49.260644),
-    (-123.250209, 49.260645),
-    (-123.250207, 49.260634),
-    (-123.250191, 49.260609),
-    (-123.250178, 49.260587),
-    (-123.250173, 49.260563),
-    (-123.250173, 49.260563),
-]
+import math, csv, json
 
 def haversine(coord1, coord2):
-    import math
-
     R = 6371  # Earth radius in kilometers
 
     lat1, lon1 = coord1
@@ -37,12 +21,52 @@ def haversine(coord1, coord2):
     distance = R * c
     return distance
 
+def get_coordinates_from_csv(csv_path: str): 
+    """
+    Parse CSV and return list of dicts with lat, lon, hdop per row.
+    """
+    records = []
+    with open(csv_path, newline='') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            payload = json.loads(row['payload'])
+            records.append({
+                'index': int(row['index']),
+                'latitude': float(payload['latitude']),
+                'longitude': float(payload['longitude']),
+                'hdop': float(payload['hdop']),
+                'satellites': int(payload['satellites']),
+            })
+    return records
 
-# Convert test_coordinates from (lon, lat) to (lat, lon) to match actual_coordinate
-distances = [haversine(actual_coordinate, (lat, lon)) for lon, lat in test_coordinates]
+def omit_high_hdop_values(records, threshold=5):
+    """
+    Filter out records where hdop >= threshold.
+    """
+    filtered = [r for r in records if r['hdop'] < threshold]
+    removed = len(records) - len(filtered)
+    print(f"HDOP threshold: {threshold} | Kept: {len(filtered)} | Removed: {removed}")
+    return filtered
 
-avg_distance_km = sum(distances) / len(distances)
-avg_distance_m = avg_distance_km * 1000
+def compute_avg_error(records: list[dict], actual_coordinate: tuple) -> float:
+    """
+    Compute average Haversine error in metres against actual coordinate.
+    """
+    distances = [haversine(actual_coordinate, (r['latitude'], r['longitude'])) for r in records]
+    avg_m = (sum(distances) / len(distances)) * 1000
+    return avg_m
 
-print(f"Individual distances (m): {[round(d * 1000, 2) for d in distances]}")
-print(f"Average location error: {avg_distance_m:.2f} m")
+if __name__ == "__main__":
+    # actual_coordinate = (49.169572, -123.123531) # HOME_TEST
+    actual_coordinate = (49.260653, -123.250294) # UBC_TEST
+
+    csv_path = r"C:\Users\teres\Projects\MPU6050_Test\python\data\heartbeat_latency_20260218_150505_to_20260218_170505.csv"
+    records = get_coordinates_from_csv(csv_path)
+
+    for threshold in [99, 10, 5, 4, 3, 2]:
+        filtered = omit_high_hdop_values(records, threshold=threshold)
+        if filtered:
+            avg_error = compute_avg_error(filtered, actual_coordinate)
+            print(f"  -> Avg location error: {avg_error:.2f} m\n")
+        else:
+            print(f"  -> No records remaining after filtering\n")
