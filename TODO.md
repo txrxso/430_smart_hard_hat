@@ -5,6 +5,7 @@
 2. [MQTT Functionality](#mqtt_func)
 3. [GPS Functionality](#gps_func)
 4. [Configuration Functionality](#config_func)
+5. [Fall/Impact Detection](#fall_impact)
 
 ## 1. CAN Functionality <a name="can_func"></a>
 ### 1.1 **Handling Incoming Alerts** [DONE]
@@ -112,3 +113,11 @@ Fix:
 
 ## 4. Configuration Functionality <a name="config_func"></a>
 ### 4.1 Sending immediate configuration payloads when a node is added or removed [TODO]
+
+
+## 5. Fall/Impact Detection <a name="fall_impact"></a>
+### 5.1 Threshold-based detection REVISED 
+Other approaches we could consider: 
+- waveform signal pattern
+- jerk (falls would have faster jerk?)
+- reorientation a_z vs a_x, a_y after a fall (gravity vector)
