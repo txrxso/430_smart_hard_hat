@@ -3,6 +3,8 @@
 # Alert Payload 
 This is what is sent to the MQTT broker.
 
+MQTT Topic: `const char* MQTT_TOPIC_ALERTS = "igen430/shh/alerts/workerA";`
+
 | Key | Example | 
 |----------|------------|
 | `event`  | "NOISE_OVER_THRESHOLD" |
@@ -17,6 +19,8 @@ This is what is sent to the MQTT broker.
 
 # Heartbeat Payload 
 This is what is sent to the MQTT broker.
+
+MQTT Topic: `const char* MQTT_TOPIC_HEARTBEATS = "igen430/shh/heartbeats/workerA";`
 
 | Key | Example | 
 |----------|------------|
