@@ -2,12 +2,14 @@
 import paho.mqtt.client as mqtt
 import json, os, time, csv, sys, signal
 from datetime import datetime, timedelta, timezone
+import ntplib as ntp
 import pandas as pd 
 from typing import List, Dict
 import yaml
 
 # CONFIGURATION
 DURATION_HRS = 2
+USE_NTP_TIME = True # whether to use NTP for latency calculation or use local host clock datetime
 
 
 def load_config() -> Dict:
@@ -25,6 +27,17 @@ def load_config() -> Dict:
 
     return broker, port, hb_topic, alert_topic, username, password
 
+
+def get_ntp_datetime(server='pool.ntp.org'):
+    """Get current datetime from NTP server"""
+    try: 
+        client = ntp.NTPClient()
+        response = client.request(server, version=3)
+        ntp_time = datetime.fromtimestamp(response.tx_time, tz=timezone.utc)
+        return ntp_time
+    except Exception as e:
+        print(f"Warning: NTP request failed: {e}")
+        return None
 
 
 def log_latency(host, port, hb_topic, alert_topic, username=None, password=None): 
@@ -72,7 +85,16 @@ def log_latency(host, port, hb_topic, alert_topic, username=None, password=None)
 
 
         def on_message(client, userdata, msg):
-            arrival_t = int(datetime.now(timezone.utc).timestamp()) # current time in seconds
+
+            if USE_NTP_TIME: 
+                ntp_dt = get_ntp_datetime()
+                if ntp_dt is None: 
+                    arrival_t = int(datetime.now(timezone.utc).timestamp())
+                else: 
+                    # convert NTP to current time in seconds
+                    arrival_t = int(ntp_dt.timestamp()) 
+            else: 
+                arrival_t = int(datetime.now(timezone.utc).timestamp()) # current time in seconds
             payload = msg.payload.decode('utf-8')
             data = json.loads(payload)
 
