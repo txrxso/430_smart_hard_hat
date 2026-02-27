@@ -6,6 +6,8 @@
 3. [GPS Functionality](#gps_func)
 4. [Configuration Functionality](#config_func)
 5. [Fall/Impact Detection](#fall_impact)
+6. [Dashboard Interfacing Requirements](#dashboard)
+7. [Documentation](#docs)
 
 ## 1. CAN Functionality <a name="can_func"></a>
 ### 1.1 **Handling Incoming Alerts** [DONE]
@@ -121,3 +123,17 @@ Other approaches we could consider:
 - waveform signal pattern
 - jerk (falls would have faster jerk?)
 - reorientation a_z vs a_x, a_y after a fall (gravity vector)
+
+
+## 6. Dashboard Interfacing  <a name="dashboard"></a>
+### 6.1 Key Updates
+Replace `acc` and `gyro` keys as `fall_detection` : 0 or 1.
+
+### 6.2 Continuous Alert Stream Unless Cancelled for Falls 
+Double check that once fall is detected, always continues to send fall_detection = 1 with original timestamp until false positive button is pressed, then return state back to 0.
+
+## 7. Documentation <a name="docs"></a>
+### 7.1 FSM Diagram for Firmware 
+Add a FSM diagram for firmware states. 
+
+### 7.2 Add docs for test scripts
