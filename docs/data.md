@@ -17,6 +17,7 @@ MQTT Topic: `const char* MQTT_TOPIC_ALERTS = "igen430/shh/alerts/workerA";`
 | `noise_db` | 120 |
 
 ### `event` strings
+`"FALL_IMPACT"` <br>
 `"NOISE_OVER_THRESHOLD"` <br>
 `"AIR_QUALITY_OVER_THRESHOLD"` <br>
 `"MANUAL_ALERT"` <br>
