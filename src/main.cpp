@@ -730,7 +730,7 @@ void setup(void) {
     "MQTTPublishTask",
     8192,
     NULL,
-    2, // higher priority for alert sending
+    2, 
     &mqttPublishTaskHandle,
     1 // core 0 or 1 
   ); 
