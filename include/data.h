@@ -108,8 +108,8 @@ struct AlertPayload {
   double longitude;
   double altitude;
   double noise_db;
-  double resultant_acc;
-  double resultant_gyro;
+  double fall_detection; // 0 or 1 to indicate fall detected
+  char originalTimestamp[32]; // store original fall time
 };
 
 
