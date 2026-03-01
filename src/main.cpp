@@ -513,81 +513,6 @@ void mqttPublishTask(void * parameter) {
 
 }
 
-// TASK: IMU Monitoring and Sampling
-void imuTask(void * parameter) {
-  imuData data;
-
-  while (true) {
-    // read IMU data and always store most recent value 
-    // this value can be used whenever heartbeat is required to be sent.
-    readIMU(data);
-    if (imuQueue != NULL) { 
-      // push into queue for heartbeat to use
-      xQueueOverwrite(imuQueue, &data);
-    }
-
-    // if fall detected, set event group bit to trigger mqtt publish task
-    SafetyEvent event = analyzeIMUData(data);
-    if (event != SafetyEvent::NONE) {
-      // check if cancel timer is active 
-      if (!isCancelActive()) {
-        // create alert payload - pull from latest GPS data 
-        AlertPayload alertToSend;
-        // set alert type
-        alertToSend.event = FALL_IMPACT; 
-        
-        attachGPSToAlert(alertToSend, gpsEventGroup, gpsQueue);
-        
-        // populate IMU measurements using imuData.float resultant_acc and resultant_gyro
-        alertToSend.resultant_acc= data.resultant_acc;
-        alertToSend.resultant_gyro = data.resultant_gyro;
-        alertToSend.noise_db = 0.0; // just set to 0.0 for now
-
-        // TO DO: add severity for SafetyEvent enum 
-        
-        // send alert to queue 
-        if (alertPublishQueue != NULL) {
-          BaseType_t result = xQueueSend(alertPublishQueue, &alertToSend, pdMS_TO_TICKS(5));
-          #if IMU_DEBUG == 1
-          printAlertPayload(alertToSend);
-          #endif 
-          
-          #if IMU_DEBUG == 2 
-          Serial.println("Sent IMU reading to queue.");
-          if (result == errQUEUE_FULL) {
-            Serial.println("Alert queue full.");
-          } 
-          
-          else {
-            Serial.println("Alert pushed to publish queue.");
-          }
-          #endif
-
-        } 
-        
-        else {
-          Serial.println("Alert publish queue is NULL, cannot send alert.");
-        }
-
-        // signal MQTT 
-        xEventGroupSetBits(mqttPublishEventGroup, PUBLISH_IMU_THRESHOLD_BIT);
-      }
-
-      else {
-        #if IMU_DEBUG
-        Serial.println("IMU event detected but cancel timer active, ignoring.");
-        #endif
-      }
-      
-    }
-
-    // sample at 100 Hz (10 ms)
-    vTaskDelay(pdMS_TO_TICKS(10));
-  }
-  
-
-}
-
 // TASK: Manual Alert Button Monitoring
 void manualAlertTask(void * parameter) {
   while (true) {
@@ -647,6 +572,13 @@ void manualAlertTask(void * parameter) {
     // check every 50 ms (task delay)
     vTaskDelay(pdMS_TO_TICKS(50));
   }
+}
+
+// TASK: IMU Monitoring and Sampling
+void imuTask(void * parameter) {
+  IMUTaskManager::State* state = (IMUTaskManager::State*)parameter;
+  IMUTaskManager::init(*state, imuQueue, gpsQueue, alertPublishQueue, mqttPublishEventGroup, gpsEventGroup);
+  IMUTaskManager::run(*state);
 }
 
 // TASK: GPS Monitoring and Sampling
