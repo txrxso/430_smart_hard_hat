@@ -38,4 +38,37 @@ void readIMU(imuData &data);
 SafetyEvent analyzeIMUData(const imuData &data); // use const for read only, reference (no copy)
 imuData getLatestIMUData();
 
+// IMU task manager namespace
+namespace IMUTaskManager { 
+  // state container : 
+  // - keep sending alerts after detected once and it is not CLEARED 
+  struct State { 
+    bool fallActive; 
+    AlertPayload originalFallAlert; // keep track of last alert payload to resend if still active
+
+    // dependencies - pointers to avoid copies 
+    QueueHandle_t imuQueue; // already a pointer
+    QueueHandle_t gpsQueue; // already a pointer
+    QueueHandle_t alertPublishQueue; // already a pointer
+    EventGroupHandle_t mqttPublishEventGroup;
+    EventGroupHandle_t gpsEventGroup;
+  };
+
+
+  // public 
+  void init(State& s, 
+    QueueHandle_t imuQueue, 
+    QueueHandle_t gpsQueue, 
+    QueueHandle_t alertPublishQueue, 
+    EventGroupHandle_t mqttPublishEventGroup, 
+    EventGroupHandle_t gpsEventGroup);
+
+  void run(State& s); // main loop for IMU task, never returns
+
+  // access functions for state
+  bool isFallActive(State& s);
+  void clearFallActive(State& s); // to be called when cancel button is pressed to clear fall state and stop sending alerts
+
+}
+
 #endif 
