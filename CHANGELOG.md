@@ -26,3 +26,9 @@
 
 ## February 18th, 2026
 - Refactored GPS code to include features from TODO.md
+
+## February 28th, 2026 
+- Refactored IMU code into IMUTaskManager namespace
+- Changed keys to send related to fall for alert with key `fall_detection` (0 or 1) to indicate fall 
+- Keep sending alerts unless alert is cancelled by button 
+- Preserve original GPS location and datetime of fall (do NOT use the current time as alerts keep being sent if goes uncleared)
