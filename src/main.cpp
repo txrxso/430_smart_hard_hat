@@ -48,6 +48,7 @@ WiFiClient wifiClient;
 #endif 
 
 GPSTaskManager::State gpsState = {}; // global state for GPS task manager
+IMUTaskManager::State imuState = {}; // global state for IMU task manager
 PubSubClient mqttClient(wifiClient);
 
 TaskHandle_t imuTaskHandle = NULL;
@@ -527,6 +528,14 @@ void manualAlertTask(void * parameter) {
 
     // check for manual clear
     if (isButtonHeld()) { 
+      // Clear fall detection state if active
+      if (IMUTaskManager::isFallActive(imuState)) {
+        IMUTaskManager::clearFallActive(imuState);
+        #if IMU_DEBUG
+        Serial.println("Fall cleared via button - sending fall_detection=0");
+        #endif
+      }
+      
       // activate cancel timer (ignore alerts for next 2 minutes)
       resetCancelTimer(); 
 
@@ -554,6 +563,9 @@ void manualAlertTask(void * parameter) {
       AlertPayload manualClearAlert;
       memset(&manualClearAlert, 0, sizeof(manualClearAlert));
       manualClearAlert.event = MANUAL_CLEAR;
+      manualClearAlert.fall_detection = 0; // explicitly set fall_detection to 0
+      attachGPSToAlert(manualClearAlert, gpsEventGroup, gpsQueue);
+      
       if (xQueueSend(alertPublishQueue, &manualClearAlert, pdMS_TO_TICKS(5)) == pdTRUE) {
         #if CAN_DEBUG
         Serial.println("Manual clear alert successfully queued for MQTT");
@@ -704,7 +716,7 @@ void setup(void) {
     imuTask,
     "IMUTask",
     4096,
-    NULL,
+    &imuState, // pass pointer to IMU task manager state
     2,
     &imuTaskHandle,
     0

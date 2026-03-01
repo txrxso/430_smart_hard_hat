@@ -24,6 +24,8 @@
 #define ROTATION_THRESHOLD_DEG_S 500
 #define WINDOW_SIZE 3 // number of samples to consider for moving average; keep small
 #define SUSTAINED_THRESHOLD 2 // number of consecutive samples exceeding threshold to consider valid event
+#define IMU_READ_INTERVAL_MS 10 // 10 ms = 100 Hz 
+
 
 enum class SafetyEvent { 
   NONE,
@@ -33,18 +35,22 @@ enum class SafetyEvent {
   HIGH_ROTATION_AND_ACC // high rotation and high acceleration is more indicative of a safety event
 };
 
+// keep out of namespace b/c hardware related
 bool setupIMU();
-void readIMU(imuData &data);
-SafetyEvent analyzeIMUData(const imuData &data); // use const for read only, reference (no copy)
-imuData getLatestIMUData();
 
-// IMU task manager namespace
+
 namespace IMUTaskManager { 
   // state container : 
   // - keep sending alerts after detected once and it is not CLEARED 
   struct State { 
     bool fallActive; 
     AlertPayload originalFallAlert; // keep track of last alert payload to resend if still active
+
+    // IMU analysis state
+    imuData latestIMU;
+    float accelWindow[WINDOW_SIZE]; // circular buffer to store recent acceleration magnitudes
+    float gyroWindow[WINDOW_SIZE]; // circular buffer to store recent gyro magnitudes
+    int windowIndex; // index for circular buffer
 
     // dependencies - pointers to avoid copies 
     QueueHandle_t imuQueue; // already a pointer
@@ -68,6 +74,14 @@ namespace IMUTaskManager {
   // access functions for state
   bool isFallActive(State& s);
   void clearFallActive(State& s); // to be called when cancel button is pressed to clear fall state and stop sending alerts
+  imuData getLatestIMU(State& s);
+
+  // IMU operations
+  void readIMU(State& s, imuData &data);
+  SafetyEvent analyzeIMUData(State& s, const imuData &data); 
+  // use const for read only, reference (no copy)
+
+// IMU task manager namespace
 
 }
 
