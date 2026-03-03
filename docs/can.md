@@ -14,13 +14,22 @@ typedef struct {
   uint16_t reserved; // to make sure 8 bytes in data expected
 } __attribute__((packed)) airQualityHB_t;
 
-// 2. Noise Heartbeat Values
+// 2. Air Quality Alert Values
+typedef struct {
+  uint8_t alert_mask;      // bit 0 = AQI_UBA, bit 1 = PM2.5, bit 2 = PM10
+  uint8_t reserved;        // padding for alignment
+  uint16_t aqi_uba;        // only valid if alert_mask bit 0 set
+  uint16_t pm25_aqi;       // only valid if alert_mask bit 1 set
+  uint16_t pm100_aqi;      // only valid if alert_mask bit 2 set
+} __attribute__((packed)) airQualityAlert_t;
+
+// 3. Noise Heartbeat Values
 typedef struct {
   uint16_t noise_db;
   uint16_t reserved[3]; // to make sure 8 bytes in data expected
 } __attribute__((packed)) noiseHB_t;
 
-// 3. Noise Alert Values 
+// 4. Noise Alert Values 
 typedef struct {
   uint16_t noise_db;
   uint16_t reserved[3]; // to make sure 8 bytes in data expected
