@@ -1,4 +1,35 @@
-# Scenarios on how this node handles CAN communication: 
+# CAN 
+
+## CAN Frame Structure From Peripheral Nodes
+Standardized format for gateway to parse. 
+
+```c++
+// CAN frame structure for different nodes
+
+// 1. Air Quality Heartbeat Values 
+typedef struct {
+  uint16_t pm25_aqi;
+  uint16_t pm100_aqi;
+  uint16_t aqi_uba;
+  uint16_t reserved; // to make sure 8 bytes in data expected
+} __attribute__((packed)) airQualityHB_t;
+
+// 2. Noise Heartbeat Values
+typedef struct {
+  uint16_t noise_db;
+  uint16_t reserved[3]; // to make sure 8 bytes in data expected
+} __attribute__((packed)) noiseHB_t;
+
+// 3. Noise Alert Values 
+typedef struct {
+  uint16_t noise_db;
+  uint16_t reserved[3]; // to make sure 8 bytes in data expected
+} __attribute__((packed)) noiseAlert_t;
+
+
+```
+
+## Scenarios on how this node handles CAN communication: 
 1. When an ALERT_NOTIFICATION is received from a peripheral module:
    - The gateway node processes the alert, formats it into an AlertPayload structure, and pushes it to the alertPublishQueue for MQTT publishing.
    - The gateway sends an ALERT_ACK back to the peripheral module to confirm receipt.
