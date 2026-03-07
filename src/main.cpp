@@ -236,7 +236,7 @@ void incomingCanTask(void * parameter) {
             aggHeartbeatResponse(nodeId, incoming_msg, hbCollectState); // just aggregates, there is a check later within this task to publish
 
             # if HEARTBEAT_DEBUG
-            Serial.printf("Aggregated heartbeat response from Node ID: 0x%02X -> noise_db: %.2f\n", nodeId, hbCollectState.payload.noise_db);
+            Serial.printf("Aggregated heartbeat response from Node ID: 0x%02X -> noise_db: %u\n", nodeId, hbCollectState.payload.noise_db);
             #endif
           }
 
@@ -247,13 +247,7 @@ void incomingCanTask(void * parameter) {
       
       else if (msgType == ALERT_NOTIFICATION) {
         // send an ACK back to peripheral module (regardless of cancel active, so can reset state on peripheral)
-        twai_message_t ack_msg;
-        ack_msg.identifier = buildCANID(CONTROL, ALERT_ACK, GATEWAY_NODE);
-        ack_msg.extd = 0;
-        ack_msg.rtr = 0;
-        ack_msg.data_length_code = 1;
-        ack_msg.data[0] = 0x01; // simple ACK payload
-        twai_transmit(&ack_msg, pdMS_TO_TICKS(100));
+        esp_err_t ackStatus = sendACK();
 
         // check cancel timer 
         if (isCancelActive()) {
@@ -272,15 +266,31 @@ void incomingCanTask(void * parameter) {
           if (nodeId == NODE_NOISE) {
             noiseAlert_t* noiseAlertFrame = (noiseAlert_t* )incoming_msg.data;
             alertToSend.event = NOISE_OVER_THRESHOLD;
-            alertToSend.noise_db = static_cast<double>(noiseAlertFrame->noise_db); // alertToSend.noise_db
+            alertToSend.noise_db = noiseAlertFrame->noise_db;
           } 
+
+          if (nodeId == NODE_AIR_Q) {
+            airQualityAlert_t* airQualityAlertFrame = (airQualityAlert_t* )incoming_msg.data;
+            alertToSend.event = AIR_QUALITY_OVER_THRESHOLD;
+
+            // extract values based on alert mask bits 
+            if (airQualityAlertFrame->alert_mask & 0x01) {
+              alertToSend.aqi_uba = airQualityAlertFrame->aqi_uba;
+            }
+            if (airQualityAlertFrame->alert_mask & 0x02) {
+              alertToSend.aqi_pm25_us = airQualityAlertFrame->pm25_aqi;
+            }
+            if (airQualityAlertFrame->alert_mask & 0x04) {
+              alertToSend.aqi_pm100_us = airQualityAlertFrame->pm100_aqi;
+            }
+          }
 
           attachGPSToAlert(alertToSend, gpsEventGroup, gpsQueue); 
 
           // forward alert to mqttPublishTask via alertPublishQueue
           if (alertPublishQueue != NULL && xQueueSend(alertPublishQueue, &alertToSend, pdMS_TO_TICKS(5)) == pdTRUE) {
             #if CAN_DEBUG == 2 || MQTT_DEBUG
-            Serial.printf("Alert from noise node queued.");
+            Serial.printf("Alert queued.");
             #endif
             
             // signal event group

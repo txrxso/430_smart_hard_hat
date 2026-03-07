@@ -32,6 +32,7 @@ uint32_t buildCANID(CANPriority priority, CANMessageType type, NodeID nodeid);
 CANPriority getPriorityFromID(uint32_t canID);
 CANMessageType getMessageTypeFromID(uint32_t canID);
 NodeID getNodeIDFromID(uint32_t canID);
+esp_err_t sendACK();
 
 esp_err_t sendHeartbeatRequest();
 

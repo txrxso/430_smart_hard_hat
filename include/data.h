@@ -107,8 +107,11 @@ struct AlertPayload {
   double latitude;
   double longitude;
   double altitude;
-  double noise_db;
+  uint16_t noise_db;
   double fall_detection; // 0 or 1 to indicate fall detected
+  uint16_t aqi_uba;
+  uint16_t aqi_pm25_us;
+  uint16_t aqi_pm100_us;
 };
 
 
@@ -162,16 +165,16 @@ struct HeartbeatPayload {
     // float pm10;
     // float pm25;
     // float pm100;
-    float aqi_pm25_us;
-    float aqi_pm100_us;
+    uint16_t aqi_pm25_us;
+    uint16_t aqi_pm100_us;
     // air quality data from ENS
     // float temperature; 
     // float humidity;
     // float eco2; 
     // float tvoc;
-    float aqi_uba;
+    uint16_t aqi_uba;
     // noise data 
-    float noise_db; // in decibels
+    uint16_t noise_db; // in decibels
 };
 
 // tracking structure for collecting heartbeats (need to know state)

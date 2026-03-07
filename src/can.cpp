@@ -54,6 +54,27 @@ NodeID getNodeIDFromID(uint32_t canID) {
     return static_cast<NodeID>(canID & 0x07);
 }
 
+esp_err_t sendACK() {
+    twai_message_t ack_msg;
+    ack_msg.identifier = buildCANID(SAFETY_ALERT, ALERT_ACK, THIS_NODE);
+    ack_msg.extd = 0;           // Standard 11-bit CAN
+    ack_msg.rtr = 0;            // Data frame, not remote request
+    ack_msg.data_length_code = 0;  // No data needed
+    esp_err_t status = twai_transmit(&ack_msg, pdMS_TO_TICKS(100));
+
+    if (status == ESP_OK) {
+        #if CAN_DEBUG
+        Serial.println("ACK sent successfully.");
+        #endif
+    } else {
+        #if CAN_DEBUG
+        Serial.printf("Failed to send ACK: 0x%X\n", status);
+        #endif
+    }
+
+    return status; 
+}
+
 esp_err_t sendHeartbeatRequest() {
     twai_message_t rtr_msg;
 
