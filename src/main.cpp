@@ -47,6 +47,12 @@ WiFiClientSecure wifiClient;
 WiFiClient wifiClient;
 #endif 
 
+// track last seq number per node to filter duplicate alerts 
+struct { 
+  uint8_t lastSeq[2] = {255,255}; // initialize to 255 so first seq of 0 is accepted for all nodes; 2 other nodes
+  bool hasReceived[2] = {false, false}; // track if we've received any messages from each node yet
+} alertSeqTracker;
+
 GPSTaskManager::State gpsState = {}; // global state for GPS task manager
 IMUTaskManager::State imuState = {}; // global state for IMU task manager
 PubSubClient mqttClient(wifiClient);
@@ -227,6 +233,11 @@ void incomingCanTask(void * parameter) {
       Serial.printf("Received CAN msg. Type: 0x%02X from Node ID: 0x%02X\n", msgType, nodeId);
       #endif
 
+      // ignore messages from our own node
+      if (nodeId == THIS_NODE) {
+        continue; // skip processing and go to next iteration
+      }
+
       // handle the message based on type of CAN message
       if (msgType == HEARTBEAT_RESPONSE && !isCollectionTimedOut(hbCollectState)) {
         if (xSemaphoreTake(hbStateMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
@@ -261,42 +272,96 @@ void incomingCanTask(void * parameter) {
           // declare alert payload 
           AlertPayload alertToSend;
           memset(&alertToSend, 0, sizeof(AlertPayload)); // use memset to clear/avoid garbage values
+          bool isDuplicate = false; // track if this is a duplicate alert
         
           // parse alert 
           if (nodeId == NODE_NOISE) {
             noiseAlert_t* noiseAlertFrame = (noiseAlert_t* )incoming_msg.data;
-            alertToSend.event = NOISE_OVER_THRESHOLD;
-            alertToSend.noise_db = noiseAlertFrame->noise_db;
-          } 
+
+            #if CAN_DEBUG
+            Serial.printf("[SEQ] NODE_NOISE: received seq=%u, lastSeq=%u, hasReceived=%d\n",
+                          noiseAlertFrame->seq_num, alertSeqTracker.lastSeq[0], alertSeqTracker.hasReceived[0]);
+            #endif
+
+            // check if duplicate based on seq number - conditions: received it before for the given seq number 
+            if (alertSeqTracker.hasReceived[0] && noiseAlertFrame->seq_num == alertSeqTracker.lastSeq[0]) { 
+              #if CAN_DEBUG
+              Serial.printf("[SEQ] DUPLICATE detected from Node 0x%02X, seq_num: %u - SKIPPING\n", nodeId, noiseAlertFrame->seq_num);  
+              #endif
+              isDuplicate = true;
+            } 
+            // not duplicate
+            else {
+               // new alert - process it 
+              alertToSend.event = NOISE_OVER_THRESHOLD;
+              alertToSend.noise_db = noiseAlertFrame->noise_db;
+              // update seq tracker
+              alertSeqTracker.lastSeq[0] = noiseAlertFrame->seq_num;
+              alertSeqTracker.hasReceived[0] = true;
+              #if CAN_DEBUG
+              Serial.printf("[SEQ] NEW alert from Node 0x%02X, seq=%u - PROCESSING\n", nodeId, noiseAlertFrame->seq_num);
+              #endif
+            }
+          }  // node_noise
 
           if (nodeId == NODE_AIR_Q) {
             airQualityAlert_t* airQualityAlertFrame = (airQualityAlert_t* )incoming_msg.data;
-            alertToSend.event = AIR_QUALITY_OVER_THRESHOLD;
 
-            // extract values based on alert mask bits 
-            if (airQualityAlertFrame->alert_mask & 0x01) {
-              alertToSend.aqi_uba = airQualityAlertFrame->aqi_uba;
-            }
-            if (airQualityAlertFrame->alert_mask & 0x02) {
-              alertToSend.aqi_pm25_us = airQualityAlertFrame->pm25_aqi;
-            }
-            if (airQualityAlertFrame->alert_mask & 0x04) {
-              alertToSend.aqi_pm100_us = airQualityAlertFrame->pm100_aqi;
-            }
-          }
-
-          attachGPSToAlert(alertToSend, gpsEventGroup, gpsQueue); 
-
-          // forward alert to mqttPublishTask via alertPublishQueue
-          if (alertPublishQueue != NULL && xQueueSend(alertPublishQueue, &alertToSend, pdMS_TO_TICKS(5)) == pdTRUE) {
-            #if CAN_DEBUG == 2 || MQTT_DEBUG
-            Serial.printf("Alert queued.");
+            #if CAN_DEBUG
+            Serial.printf("[SEQ] NODE_AIR_Q: received seq=%u, lastSeq=%u, hasReceived=%d\n",
+                          airQualityAlertFrame->seq_num, alertSeqTracker.lastSeq[1], alertSeqTracker.hasReceived[1]);
             #endif
+
+            // check if duplicate based on seq number - conditions: received it before for the given seq number 
+            if (alertSeqTracker.hasReceived[1] && airQualityAlertFrame->seq_num == alertSeqTracker.lastSeq[1]) { 
+              // duplicate - ignore
+              #if CAN_DEBUG
+              Serial.printf("[SEQ] DUPLICATE detected from Node 0x%02X, seq_num: %u - SKIPPING\n", 
+                            nodeId, airQualityAlertFrame->seq_num);
+              #endif
+              isDuplicate = true;
+            } 
+            else {
+              alertToSend.event = AIR_QUALITY_OVER_THRESHOLD;
+
+              // extract values based on alert mask bits 
+              if (airQualityAlertFrame->alert_mask & 0x01) {
+                alertToSend.aqi_uba = airQualityAlertFrame->aqi_uba;
+              }
+              if (airQualityAlertFrame->alert_mask & 0x02) {
+                alertToSend.aqi_pm25_us = airQualityAlertFrame->pm25_aqi;
+              }
+              if (airQualityAlertFrame->alert_mask & 0x04) {
+                alertToSend.aqi_pm100_us = airQualityAlertFrame->pm100_aqi;
+              }
+
+              //update seq tracker
+              alertSeqTracker.lastSeq[1] = airQualityAlertFrame->seq_num;
+              alertSeqTracker.hasReceived[1] = true;
+              #if CAN_DEBUG
+              Serial.printf("[SEQ] NEW alert from Node 0x%02X, seq=%u - PROCESSING\n", nodeId, airQualityAlertFrame->seq_num);
+              #endif
+            }
+          } // node_air_q
+
+          // Only process alert if not a duplicate
+          if (!isDuplicate) {
+            attachGPSToAlert(alertToSend, gpsEventGroup, gpsQueue); 
+
+            // forward alert to mqttPublishTask via alertPublishQueue
+            if (alertPublishQueue != NULL && xQueueSend(alertPublishQueue, &alertToSend, pdMS_TO_TICKS(5)) == pdTRUE) {
+              #if CAN_DEBUG == 2 || MQTT_DEBUG
+              Serial.printf("Alert queued.");
+              #endif
             
-            // signal event group
-            xEventGroupSetBits(mqttPublishEventGroup, PUBLISH_CAN_ALERT_BIT);
+              // signal event group
+              xEventGroupSetBits(mqttPublishEventGroup, PUBLISH_CAN_ALERT_BIT);
+            }
+          } else {
+            #if CAN_DEBUG
+            Serial.println("[SEQ] Duplicate alert NOT forwarded to MQTT");
+            #endif
           }
-          
 
         }
       
