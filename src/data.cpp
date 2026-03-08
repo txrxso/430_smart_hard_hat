@@ -95,12 +95,9 @@ void aggHeartbeatResponse(NodeID nodeId, const twai_message_t& msg, hbCollection
   else if (nodeId == NODE_NOISE) {
     noiseHB_t noiseData;
     memcpy(&noiseData, msg.data, sizeof(noiseHB_t));
-    Serial.printf("Extracted noise_db uint16_t: %d\n", noiseData.noise_db);
 
     // directly assign uint16_t value
     collection.payload.noise_db = noiseData.noise_db;
-    Serial.printf("Assigned noise_db uint16_t: %u\n", collection.payload.noise_db);
-    Serial.printf("DEBUG: noise_db address = %p, value = %u\n", &collection.payload.noise_db, collection.payload.noise_db);
     Serial.printf("DEBUG: hbPayload size = %d bytes\n", sizeof(HeartbeatPayload));
     // mark which node responded 
     collection.payload.modulesOnline[1] = static_cast<u_int8_t>(nodeId);
