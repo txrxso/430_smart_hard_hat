@@ -32,3 +32,8 @@
 - Changed keys to send related to fall for alert with key `fall_detection` (0 or 1) to indicate fall 
 - Keep sending alerts unless alert is cancelled by button 
 - Preserve original GPS location and datetime of fall (do NOT use the current time as alerts keep being sent if goes uncleared)
+
+## March 7-8th, 2026
+- Added sequence numbers to distinguish duplicates (retried alerts from peripheral nodes)
+    - to fix bug where it spams 3 of the same alerts because the peripheral didn't receive the ACK in time
+- Added AQ CAN frame parsing and serialization
