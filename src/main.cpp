@@ -591,18 +591,67 @@ void mqttPublishTask(void * parameter) {
 
 // TASK: Manual Alert Button Monitoring
 void manualAlertTask(void * parameter) {
+  #if BUTTON_DEBUG
+  static unsigned long lastDebugPrint = 0;
+  static unsigned long lastISRCount = 0;
+  #endif
+  
   while (true) {
+    #if BUTTON_DEBUG
+    // Print debug info every 10 seconds (reduce serial overhead)
+    if (millis() - lastDebugPrint > 10000) {
+      unsigned long currentISRCount = getButtonISRCount();
+      Serial.print("[BUTTON] ISR count: ");
+      Serial.print(currentISRCount);
+      Serial.print(" (delta: ");
+      Serial.print(currentISRCount - lastISRCount);
+      Serial.print("), Pin state: ");
+      Serial.print(digitalRead(BUTTON_PIN) ? "HIGH" : "LOW");
+      Serial.print(", Button pressed: ");
+      Serial.println(buttonState() ? "YES" : "NO");
+      lastDebugPrint = millis();
+      lastISRCount = currentISRCount;
+    }
+    #endif
+    
     // check for manual alert
     if (isButtonDoublePressed()) { 
+      #if BUTTON_DEBUG
+      Serial.println("[MAIN] Double-press detected - triggering manual alert");
+      #endif
+      
       // only signal if cancel timer is not active
       if (!isCancelActive()) {
-        // signal MQTT publish for manual alert
-        xEventGroupSetBits(mqttPublishEventGroup, PUBLISH_MANUAL_ALERT_BIT);
+        // Create and queue manual alert payload
+        AlertPayload manualAlertPayload;
+        memset(&manualAlertPayload, 0, sizeof(manualAlertPayload));
+        manualAlertPayload.event = MANUAL_ALERT;
+        attachGPSToAlert(manualAlertPayload, gpsEventGroup, gpsQueue);
+        
+        if (xQueueSend(alertPublishQueue, &manualAlertPayload, pdMS_TO_TICKS(5)) == pdTRUE) {
+          // signal MQTT publish for manual alert
+          xEventGroupSetBits(mqttPublishEventGroup, PUBLISH_MANUAL_ALERT_BIT);
+          
+          #if BUTTON_DEBUG
+          Serial.println("[MAIN] Manual alert queued for MQTT publish");
+          #endif
+        } else {
+          #if BUTTON_DEBUG
+          Serial.println("[MAIN] Failed to queue manual alert!");
+          #endif
+        }
+      } else {
+        #if BUTTON_DEBUG
+        Serial.println("[MAIN] Manual alert BLOCKED - cancel timer active");
+        #endif
       }
     }
 
     // check for manual clear
-    if (isButtonHeld()) { 
+    if (isButtonHeld()) {
+      #if BUTTON_DEBUG
+      Serial.println("[MAIN] Button hold detected - triggering manual clear");
+      #endif 
       // Clear fall detection state if active
       if (IMUTaskManager::isFallActive(imuState)) {
         IMUTaskManager::clearFallActive(imuState);

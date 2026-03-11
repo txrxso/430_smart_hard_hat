@@ -8,6 +8,7 @@
 #define CAN_DEBUG 1
 // set CAN_DEBUG to 2 to also print when no message received within timeout window, which can be useful for monitoring heartbeat timeouts, etc.
 #define HEARTBEAT_DEBUG 1
+#define BUTTON_DEBUG 1
 
 
 // flags for mocks

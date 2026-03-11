@@ -17,5 +17,6 @@ bool isButtonDoublePressed(); // check for double press
 bool isButtonHeld(); // check for hold
 bool isCancelActive(); // check if cancel timer is active
 void resetCancelTimer(); // resets the cancel timer for manual clear
+unsigned long getButtonISRCount(); // get ISR fire count for debugging
 
 #endif

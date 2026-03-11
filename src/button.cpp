@@ -1,4 +1,7 @@
 #include "button.h"
+#include "debug.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 
 // static used to mark variables to be permanent but not accessible from outside scope
@@ -9,6 +12,7 @@ static volatile unsigned long lastPressTime = 0;
 static volatile unsigned long pressStartTime = 0;
 static volatile bool buttonPressed = false; // get state of button press
 static volatile int pressCount = 0;
+static volatile unsigned long isrCounter = 0; // count ISR calls for debugging
 
 // cancel timer state 
 static unsigned long cancelTimerStart = 0;
@@ -16,6 +20,7 @@ static bool cancelActive = false;
 
 // runs when button state changes (count valid presses within time window & update state vars)
 void IRAM_ATTR buttonISR() {
+    isrCounter++; // increment each time ISR fires (for debugging)
     unsigned long currentTime = millis();
     bool currentState = digitalRead(BUTTON_PIN) == LOW; // assuming active LOW with pull-up (pressed = low to GND)
 
@@ -51,7 +56,24 @@ void IRAM_ATTR buttonISR() {
 
 void buttonInit() {
     pinMode(BUTTON_PIN, INPUT); //INPUT_PULLUP); // assuming button connects to GND when pressed
+    
+    #if BUTTON_DEBUG
+    Serial.println("\n=== BUTTON INIT ===");
+    Serial.print("Button pin: ");
+    Serial.println(BUTTON_PIN);
+    Serial.print("Initial pin state: ");
+    Serial.println(digitalRead(BUTTON_PIN) ? "HIGH" : "LOW");
+    Serial.print("Attaching interrupt to pin ");
+    Serial.print(digitalPinToInterrupt(BUTTON_PIN));
+    Serial.println("...");
+    #endif
+    
     attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, CHANGE);
+    
+    #if BUTTON_DEBUG
+    Serial.println("Button interrupt attached successfully");
+    Serial.println("==================\n");
+    #endif
 }
 
 // get current state
@@ -66,6 +88,9 @@ bool isButtonDoublePressed() {
     // 2+ presses and all within interval? 
     if (pressCount >= 2 && (currentTime - lastPressTime) <= BUTTON_DOUBLE_PRESS_INTERVAL_MS) {
         pressCount = 0; // reset count
+        #if BUTTON_DEBUG
+        Serial.println("[BUTTON EVENT] Double-press detected!");
+        #endif
         return true;
     }
 
@@ -86,10 +111,18 @@ bool isButtonHeld() {
         buttonPressed = false; 
         pressCount = 0;
 
-        // wait for physical release 
+        #if BUTTON_DEBUG
+        Serial.println("[BUTTON EVENT] Hold detected! Waiting for release...");
+        #endif
+
+        // wait for physical release (yield to prevent watchdog timeout)
         while (digitalRead(BUTTON_PIN) == LOW) {
-            // do nothing, just wait
+            vTaskDelay(pdMS_TO_TICKS(10)); // yield to other tasks and reset watchdog
         }
+
+        #if BUTTON_DEBUG
+        Serial.println("[BUTTON EVENT] Button released after hold.");
+        #endif
 
         return true;
     }
@@ -114,4 +147,9 @@ bool isCancelActive() {
 void resetCancelTimer() {
     cancelActive = true;
     cancelTimerStart = millis();
+}
+
+// get ISR counter for debugging
+unsigned long getButtonISRCount() {
+    return isrCounter;
 }
