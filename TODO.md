@@ -114,11 +114,11 @@ Fix:
 - Can Kalman filter be implemented if only have acc (x,y,z) and gyro (x,y,z) and how to account for drift otherwise?
 
 ## 4. Configuration Functionality <a name="config_func"></a>
-### 4.1 Sending immediate configuration payloads when a node is added or removed [TODO]
-
+### 4.1 Sending immediate configuration payloads when a node is added or removed [REMOVED]
+- Not necessary, because only care that it detects the topology change on the bus after 1 heartbeat cycle
 
 ## 5. Fall/Impact Detection <a name="fall_impact"></a>
-### 5.1 Threshold-based detection REVISED 
+### 5.1 Threshold-based detection REVISED [TODO]
 Other approaches we could consider: 
 - waveform signal pattern
 - jerk (falls would have faster jerk?)
@@ -126,7 +126,7 @@ Other approaches we could consider:
 
 
 ## 6. Dashboard Interfacing  <a name="dashboard"></a>
-### 6.1 Key Updates
+### 6.1 Key Updates [DONE]
 Replace `acc` and `gyro` keys as `fall_detection` : 0 or 1.
 
 ### 6.2 Continuous Alert Stream Unless Cancelled for Falls 
@@ -137,3 +137,11 @@ Double check that once fall is detected, always continues to send fall_detection
 Add a FSM diagram for firmware states. 
 
 ### 7.2 Add docs for test scripts
+
+
+## 8. Testing 
+### 8.1 Duty Cycle Verification: esp_timer to estimate tx_duration 
+Components: 
+- Need to add script to log via serial & check while subscribed to MQTT topic, that message was received 
+    - Need to separate diff. tx_durations for Alert (and also alert types) and Heartbeat Payloads
+- Adding flag to compile with sending values via serial `#define BUILD_ESP_TIMER 1`
