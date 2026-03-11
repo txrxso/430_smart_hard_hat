@@ -22,7 +22,6 @@ void IRAM_ATTR buttonISR() {
     // RELEASED -> PRESSED
     if (currentState && !buttonPressed) {
         // button pressed down
-        Serial.println("Button pressed down");
         buttonPressed = true;
         pressStartTime = currentTime;
     } 
@@ -30,7 +29,6 @@ void IRAM_ATTR buttonISR() {
     // PRESSED -> RELEASED
     else if (!currentState && buttonPressed) {
         // button released
-        Serial.println("Button released");
         buttonPressed = false;
         unsigned long pressDuration = millis()  - pressStartTime;
 
@@ -52,7 +50,7 @@ void IRAM_ATTR buttonISR() {
 
 
 void buttonInit() {
-    pinMode(BUTTON_PIN, INPUT_PULLUP); // assuming button connects to GND when pressed
+    pinMode(BUTTON_PIN, INPUT); //INPUT_PULLUP); // assuming button connects to GND when pressed
     attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, CHANGE);
 }
 

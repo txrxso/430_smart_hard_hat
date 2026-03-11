@@ -693,6 +693,7 @@ void setup(void) {
 
   // hardware setup
   setupGPS();
+  buttonInit();
 
   // initialize CAN
   while (!initCAN()) {

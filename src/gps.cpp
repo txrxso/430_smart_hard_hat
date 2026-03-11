@@ -147,7 +147,7 @@ namespace GPSTaskManager {
         // push to queue (overwrites old data)
         xQueueOverwrite(s.gpsQueue, &s.lastValidGPS); // push pointer to last valid GPS data in state to queue for others to read
 
-        #if GPS_DEBUG 
+        #if GPS_DEBUG == 2
         Serial.printf("GPS queue updated: (%.6f, %.6f) at %s\n", s.lastValidGPS.latitude, s.lastValidGPS.longitude, s.lastValidGPS.dateTime);
         #endif
     } //updateQueue()
