@@ -1,0 +1,59 @@
+{
+  "scenario": "heartbeat_only",
+  "num_nodes": 1,
+  "test_duration_s": 980.7302782535553,
+  "total_events": 143,
+  "total_tx_time_us": 3510357,
+  "total_tx_time_s": 3.510357,
+  "duty_cycle_pct": 0.35793296871093866,
+  "success_stats": {
+    "count": 143,
+    "duration_us": 3510357,
+    "duration_s": 3.510357,
+    "duty_cycle_pct": 0.35793296871093866
+  },
+  "failed_stats": {
+    "count": 0,
+    "duration_us": 0,
+    "duration_s": 0.0,
+    "duty_cycle_pct": 0.0
+  },
+  "events_by_type": {
+    "Alert": {
+      "count": 138,
+      "success_count": 138,
+      "success_duration_us": 237112,
+      "failed_count": 0,
+      "failed_duration_us": 0,
+      "total_duration_us": 237112,
+      "avg_duration_ms": 1.7182028985507247,
+      "min_duration_ms": 1.12,
+      "max_duration_ms": 2.35,
+      "duty_cycle_pct": 0.024177085714355576
+    },
+    "Heartbeat": {
+      "count": 4,
+      "success_count": 4,
+      "success_duration_us": 8880,
+      "failed_count": 0,
+      "failed_duration_us": 0,
+      "total_duration_us": 8880,
+      "avg_duration_ms": 2.22,
+      "min_duration_ms": 2.163,
+      "max_duration_ms": 2.356,
+      "duty_cycle_pct": 0.0009054477257307833
+    },
+    "MQTT_Connect": {
+      "count": 1,
+      "success_count": 1,
+      "success_duration_us": 3264365,
+      "failed_count": 0,
+      "failed_duration_us": 0,
+      "total_duration_us": 3264365,
+      "avg_duration_ms": 3264.365,
+      "min_duration_ms": 3264.365,
+      "max_duration_ms": 3264.365,
+      "duty_cycle_pct": 0.33285043527085234
+    }
+  }
+}
