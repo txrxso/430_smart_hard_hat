@@ -747,7 +747,6 @@ void setup(void) {
 
 
   // for core 0 
-
   xTaskCreatePinnedToCore(
     manualAlertTask, 
     "ManualAlertTask",
@@ -776,11 +775,7 @@ void setup(void) {
     1,
     &gpsTaskHandle,
     0
-  );
-
-
-
-  
+  );  
 }
 
 void loop() { 
