@@ -39,6 +39,43 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 #define HEARTBEAT_INTERVAL_MIN 5  // set to 5 minutes // in minutes
 #define MAX_IMMEDIATE_MQTT_RETRIES 3
 #define MQTT_RETRY_DELAY_MS 100
+#define DUTY_CYCLE 1 // set to 1 to enable tx_duration measurements for duty cycle calculation
+
+#if DUTY_CYCLE
+#include <esp_timer.h>
+
+struct DutyCycleStats {
+  char event_type;            // 'H'=Heartbeat, 'A'=Alert, 'W'=WiFi, 'M'=MQTT
+  uint32_t esp32_timestamp_ms; // millis() when event occurred
+  uint32_t duration_us;        // Duration of transmission in microseconds
+  bool success;                // Was transmission successful
+};
+
+QueueHandle_t dutyCycleQueue = NULL; // queue for sending duty cycle stats from tasks to logger task
+#define DC_QUEUE_SIZE 50 
+
+// helper to log without blocking main task execution 
+inline void logDutyCycle(char event_type, uint64_t duration_us, bool success) {
+  DutyCycleStats stats = {event_type, (uint32_t)millis(), (uint32_t)duration_us, success};
+  if (dutyCycleQueue != NULL) {
+    xQueueSend(dutyCycleQueue, &stats, 0); // non-blocking send
+  }
+}
+
+// task to drain queue and print stats to serial
+void dutyCycleLogTask(void *parameter) { 
+  DutyCycleStats stats;
+  while (true) {
+    if (xQueueReceive(dutyCycleQueue, &stats, pdMS_TO_TICKS(100)) == pdTRUE) {
+      // CSV format: event_type,esp32_timestamp_ms,duration_us,success
+      Serial.printf("%c,%lu,%lu,%d\n", stats.event_type, stats.esp32_timestamp_ms, 
+                    stats.duration_us, stats.success ? 1 : 0);
+    }
+    vTaskDelay(pdMS_TO_TICKS(10)); // fast drain
+  }
+}
+
+#endif
 
 // for maintaining connection state
 #if ENABLE_TLS 
@@ -86,13 +123,12 @@ bool connectToMQTT(bool enableTLS = ENABLE_TLS) {
   // print debug info
   Serial.print("WiFi status: ");
   Serial.println(isWifiConnected() ? "Connected" : "Disconnected");
-  // Serial.print("ESP32 IP: ");
-  // Serial.println(WiFi.localIP());
-  // Serial.print("Connecting to broker: ");
-  // Serial.print(MQTT_SERVER_HIVEMQ_PUBLIC);
-  // Serial.print(":");
-  // Serial.println(MQTT_PORT_HIVEMQ_PUBLIC);
   #endif 
+  
+  #if DUTY_CYCLE
+  uint64_t mqtt_start_us = esp_timer_get_time();
+  #endif
+  
   bool success = false;
 
   if (enableTLS) {
@@ -101,6 +137,11 @@ bool connectToMQTT(bool enableTLS = ENABLE_TLS) {
   else{
     success = mqttClient.connect("ESP32Client");
   }
+  
+  #if DUTY_CYCLE
+  uint64_t mqtt_duration_us = esp_timer_get_time() - mqtt_start_us;
+  logDutyCycle('M', mqtt_duration_us, success);
+  #endif
   
   #if MQTT_DEBUG
   if (success) {
@@ -247,7 +288,7 @@ void incomingCanTask(void * parameter) {
             aggHeartbeatResponse(nodeId, incoming_msg, hbCollectState); // just aggregates, there is a check later within this task to publish
 
             # if HEARTBEAT_DEBUG
-            Serial.printf("Aggregated heartbeat response from Node ID: 0x%02X -> noise_db: %u\n", nodeId, hbCollectState.payload.noise_db);
+            Serial.printf("Aggregated heartbeat response from Node ID: 0x%02X\n", nodeId);
             #endif
           }
 
@@ -448,7 +489,16 @@ void mqttPublishTask(void * parameter) {
   while (true) { 
     // maintain wifi connection 
     if (!isWifiConnected()) {
+      #if DUTY_CYCLE
+      uint64_t wifi_start_us = esp_timer_get_time();
+      #endif
+      
       WiFi.reconnect();
+      
+      #if DUTY_CYCLE
+      uint64_t wifi_duration_us = esp_timer_get_time() - wifi_start_us;
+      logDutyCycle('W', wifi_duration_us, isWifiConnected());
+      #endif
     }
 
     // maintain mqtt connection
@@ -499,7 +549,16 @@ void mqttPublishTask(void * parameter) {
           int attempts = 0;
 
           while (attempts < MAX_IMMEDIATE_MQTT_RETRIES) {
+            #if DUTY_CYCLE
+            uint64_t tx_start_us = esp_timer_get_time();
+            #endif
+            
             success =  mqttClient.publish(MQTT_TOPIC_ALERTS, alertPayloadBuffer);
+            
+            #if DUTY_CYCLE
+            uint64_t tx_duration_us = esp_timer_get_time() - tx_start_us;
+            logDutyCycle('A', tx_duration_us, success);
+            #endif
 
             if (success) {
               #if MQTT_DEBUG
@@ -553,7 +612,16 @@ void mqttPublishTask(void * parameter) {
       while (heartbeatPublishQueue != NULL && xQueueReceive(heartbeatPublishQueue, &hbToSend, 0) == pdTRUE) {
         // prepare JSON payload
         if (serializeHB(hbToSend, heartbeatPayloadBuffer, sizeof(heartbeatPayloadBuffer))) {
+          #if DUTY_CYCLE
+          uint64_t tx_start_us = esp_timer_get_time();
+          #endif
+          
           bool success = mqttClient.publish(MQTT_TOPIC_HEARTBEATS, heartbeatPayloadBuffer);
+          
+          #if DUTY_CYCLE
+          uint64_t tx_duration_us = esp_timer_get_time() - tx_start_us;
+          logDutyCycle('H', tx_duration_us, success);
+          #endif
 
           // if publish failed, put message back at front of queue 
           if (!success) {
@@ -748,6 +816,20 @@ void setup(void) {
   while (!initCAN()) {
     delay(20);
   } 
+
+  #if DUTY_CYCLE
+  dutyCycleQueue = xQueueCreate(DC_QUEUE_SIZE, sizeof(DutyCycleStats));
+  xTaskCreatePinnedToCore(
+    dutyCycleLogTask,
+    "DutyCycleLogTask",
+    2048,
+    NULL,
+    0,  // lowest priority
+    NULL,
+    1   // pin to core 1
+  );
+  Serial.println("DUTY_CYCLE_START"); // marker for Python script
+  #endif
 
   mqttPublishEventGroup = xEventGroupCreate();
   mqttPublishHealthGroup = xEventGroupCreate();
