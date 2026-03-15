@@ -11,7 +11,7 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 // MQTT
 #include <WiFi.h>
 #include <WiFiClientSecure.h> // for TLS
-#include <PubSubClient.h>
+#include "mqtt.h" // for MQTT
 #include "wifi_config.h"  // config and credentials
 #include "mqtt_config.h"
 
@@ -35,11 +35,7 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 #include <freertos/queue.h>
 
 // define DEBUG mode to print stuff
-#define ENABLE_TLS 1
 #define HEARTBEAT_INTERVAL_MIN 5  // set to 5 minutes // in minutes
-#define MAX_IMMEDIATE_MQTT_RETRIES 3
-#define MQTT_RETRY_DELAY_MS 100
-#define DUTY_CYCLE 0 // set to 1 to enable tx_duration measurements for duty cycle calculation
 
 #if DUTY_CYCLE
 #include <esp_timer.h>
@@ -121,55 +117,6 @@ SemaphoreHandle_t hbStateMutex = xSemaphoreCreateMutex(); // global scope
 hbCollection hbCollectState = {
   .isCollecting = false,
 }; // start with isCollecting = true so requests can begin immediately
-
-bool connectToMQTT(bool enableTLS = ENABLE_TLS) {
-  #if MQTT_DEBUG
-  // Serial.println("Attempting MQTT connection...");
-  // print debug info
-  Serial.print("WiFi status: ");
-  Serial.println(isWifiConnected() ? "Connected" : "Disconnected");
-  #endif 
-  
-  #if DUTY_CYCLE
-  uint64_t mqtt_start_us = esp_timer_get_time();
-  #endif
-  
-  bool success = false;
-
-  if (enableTLS) {
-    success = mqttClient.connect("ESP32Client", MQTT_USER, MQTT_PSWD);
-  }
-  else{
-    success = mqttClient.connect("ESP32Client");
-  }
-  
-  #if DUTY_CYCLE
-  uint64_t mqtt_duration_us = esp_timer_get_time() - mqtt_start_us;
-  logDutyCycle('M', mqtt_duration_us, success);
-  #endif
-  
-  #if MQTT_DEBUG
-  if (success) {
-    Serial.println("MQTT connected successfully on first attempt");
-  } 
-  else {
-    Serial.print("MQTT connection failed on first attempt, state=");
-    Serial.println(mqttClient.state());
-    switch(mqttClient.state()) {
-        case -4: Serial.println("MQTT_CONNECTION_TIMEOUT"); break;
-        case -3: Serial.println("MQTT_CONNECTION_LOST"); break;
-        case -2: Serial.println("MQTT_CONNECT_FAILED"); break;
-        case -1: Serial.println("MQTT_DISCONNECTED"); break;
-        case 1: Serial.println("MQTT_CONNECT_BAD_PROTOCOL"); break;
-        case 2: Serial.println("MQTT_CONNECT_BAD_CLIENT_ID"); break;
-        case 3: Serial.println("MQTT_CONNECT_UNAVAILABLE"); break;
-        case 4: Serial.println("MQTT_CONNECT_BAD_CREDENTIALS"); break;
-        case 5: Serial.println("MQTT_CONNECT_UNAUTHORIZED"); break;
-      }
-  }
-  #endif 
-  return success;
-}
 
 
 // TASK: just sends requests for heartbeat data based on timer
