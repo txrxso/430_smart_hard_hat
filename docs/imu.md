@@ -9,98 +9,98 @@
 - **State isolation** - only `manualAlertTask()` has authority to change fall active state
 
 ## Fall/Impact Detection Algorithm
-WIP 
 
-### Safety Event Types
+**Two-Tier Hybrid Approach** for distinguishing real safety events from normal activities (sitting, walking, etc.):
 
-```cpp
-enum class SafetyEvent { 
-  NONE,                      // No safety event detected
-  FREEFALL,                  // Sustained < 0.3g acceleration
-  MEDIUM_IMPACT,             // 4-10g impact
-  HEAVY_IMPACT,              // > 10g impact
-  HIGH_ROTATION_AND_ACC      // Combined high rotation + acceleration
-};
-```
+### **Tier 1: Immediate Alert (>8g)**
+If resultant acceleration exceeds **8g**, immediately return `SafetyEvent::HEAVY_IMPACT` without validation. Covers:
+- Vehicle collisions
+- Crushing injuries  
+- Falls from great heights
+Life-threatening impacts need instant response.
 
-## Data Structures
+### **Tier 2: State Machine (4-8g)**
+For moderate forces, use a **6-state machine** to validate the event pattern and reduce false positives.
 
-### IMU Data Container
-```cpp
-struct imuData {
-  float accX, accY, accZ;         // Acceleration in g's
-  float gyroX, gyroY, gyroZ;      // Rotation in deg/s
-  float resultant_acc;            // Magnitude of acceleration vector
-  float resultant_gyro;           // Magnitude of rotation vector
-};
-```
+#### **States:**
 
-### Task Manager State
-```cpp
-namespace IMUTaskManager {
-  struct State { 
-    // Fall detection persistence
-    bool fallActive;                      // True when fall detected, cleared only by button
-    AlertPayload originalFallAlert;       // Stored GPS location/timestamp from first detection
-    
-    // IMU analysis state
-    imuData latestIMU;                    // Most recent sensor reading
-    float accelWindow[WINDOW_SIZE];       // Circular buffer for acceleration
-    float gyroWindow[WINDOW_SIZE];        // Circular buffer for rotation
-    int windowIndex;                      // Current position in circular buffers
-    
-    // Dependencies
-    QueueHandle_t imuQueue;               // For heartbeat payload access
-    QueueHandle_t gpsQueue;               // For GPS data retrieval
-    QueueHandle_t alertPublishQueue;      // For sending alerts to MQTT
-    EventGroupHandle_t gpsEventGroup;     // For GPS read requests
-    EventGroupHandle_t mqttPublishEventGroup; // For MQTT publish signaling
-  };
-}
-```
+**1. NORMAL** (Starting state)
+Three detection paths:
 
-## Task Operation
-
-### Initialization
-
-The `IMUTaskManager::init()` function sets up:
-
-1. **Fall state** - initialized to `false` (no active fall)
-2. **Circular buffers** - accel initialized to 1.0g (not freefall), gyro to 0.0
-3. **Queue handles** - connections to GPS, alerts, and MQTT systems
-4. **Event group handles** - for cross-task signaling
-
-### Main Loop (100 Hz)
-
-The `run()` function executes continuously at 10 ms intervals:
-
-```cpp
-while (true) {
-  // 1. Read sensor
-  readIMU(s, data);                        // Sample MPU6050
-  xQueueOverwrite(s.imuQueue, &data);      // Update queue for heartbeats
+- **Path A: Freefall** (`acc < 0.3g`)  
+  → Transition to `FREEFALL`  
+  → Stores pre-event orientation for later comparison
   
-  // 2. Analyze for safety events
-  SafetyEvent event = analyzeIMUData(s, data);
+- **Path B: Direct Impact** (`acc > 4g` AND `jerk > 65 g/s`)  
+  → Validates with window buffer (2/3 samples must be high)  
+  → Transition to `IMPACT` with event type `DIRECT_IMPACT`
   
-  // 3. Handle new fall detection
-  if (event != NONE && !fallActive && !isCancelActive()) {
-    - Get GPS location via attachGPSToAlert()
-    - Store original alert in originalFallAlert
-    - Set fallActive = true
-    - Send first alert with fall_detection = 1
-  }
+- **Path C: Rotational Impact** (`rotation > 500 deg/s` AND `acc > 4g`)  
+  → Transition to `IMPACT` with event type `DIRECT_IMPACT`
+
+**2. FREEFALL** (Person is falling)
+Waiting for impact or recovery:
+
+- **Impact detected** (`acc > 4g` AND `jerk > 65 g/s`)  
+  → If timing valid (100-500ms freefall duration): transition to `IMPACT`  
+  → If timing invalid: transition to `RECOVERED` (false alarm)
   
-  // 4. Continue alert stream if fall active
-  else if (fallActive && !isCancelActive()) {
-    - Use ORIGINAL GPS data from originalFallAlert
-    - Send alert with fall_detection = 1
-    - Keep same timestamp as first detection
-  }
-  
-  vTaskDelay(10ms);  // 100 Hz sampling
-}
-```
+- **Timeout** (>500ms without impact)  
+  → Transition to `RECOVERED` (person caught themselves)
+
+**3. IMPACT** (Just experienced impact)
+Observation period:
+
+- Wait 1 second for motion to settle  
+- Transition to `POST_IMPACT` to check post-impact condition
+
+**4. POST_IMPACT** (Checking recovery vs injury)
+Evaluates two criteria:
+
+- **Orientation:** Is person horizontal? (gravity in x-y plane vs z-axis)
+- **Motion:** Is person motionless? (`|acc - 1g| < 0.3` AND `gyro < 50 deg/s`)
+
+**Decision logic:**
+- If horizontal AND motionless for >2 seconds → `INJURY_LIKELY` (ALERT!)
+- If moving → `RECOVERED` (got back up, probably fine)  
+- Otherwise → keep observing
+
+**5. INJURY_LIKELY** (Confirmed safety event)
+- Continuously return `FALL` or `DIRECT_IMPACT` event
+- Stay in this state until manual clear button pressed
+
+**6. RECOVERED** (False alarm)
+- Reset state to `NORMAL`
+- Resume monitoring
+
+#### Other Notes
+
+**Jerk Calculation** (smoothed over 3 samples with individual time deltas):
+- Distinguishes sudden impacts (high jerk) from gradual motions like sitting (low jerk)
+- Filters sensor noise while maintaining fast response
+
+**Window Validation**:
+- Requires 2/3 samples in buffer to exceed threshold
+- Prevents single noise spikes from triggering alerts
+
+**Timing Constraints**:
+- Freefall must last 100-500ms 
+- Too short = noise, too long = caught themselves
+- Post-impact motionless check requires 2 seconds
+
+**Orientation Analysis**:
+- Standing: `az ≈ 1g`, `√(ax² + ay²) ≈ 0`
+- Lying down: `az ≈ 0`, `√(ax² + ay²) ≈ 1g`
+
+#### **Example Scenarios:**
+
+| **Event** | **State Flow** | **Output** |
+|-----------|---------------|------------|
+| Fall from ladder | NORMAL → FREEFALL → IMPACT → POST_IMPACT → INJURY_LIKELY | `FALL` alert |
+| Struck by falling object | NORMAL → IMPACT → POST_IMPACT → INJURY_LIKELY | `DIRECT_IMPACT` alert |
+| Vehicle collision | NORMAL → INJURY_LIKELY (instant) | `HEAVY_IMPACT` alert |
+| Sitting down hard, hop | NORMAL (low jerk, filtered) | No alert |
+| Tripping but catching self | NORMAL → FREEFALL → RECOVERED | No alert |
 
 ## Continuous Alert Stream
 
@@ -186,34 +186,4 @@ This translates to the payload having the following keys and values:
 mpu.setAccelerometerRange(MPU6050_RANGE_16_G);     // ±16g range
 mpu.setGyroRange(MPU6050_RANGE_1000_DEG);          // ±1000 deg/s range  
 mpu.setHighPassFilter(MPU6050_HIGHPASS_0_63_HZ);   // Filter low-freq noise
-```
-
-## API Reference
-
-### Public Functions
-
-```cpp
-namespace IMUTaskManager {
-  // Initialization
-  void init(State& s, QueueHandle_t imuQueue, QueueHandle_t gpsQueue, 
-            QueueHandle_t alertPublishQueue, EventGroupHandle_t gpsEventGroup,
-            EventGroupHandle_t mqttPublishEventGroup);
-  
-  // Main task loop (never returns)
-  void run(State& s);
-  
-  // State accessors
-  bool isFallActive(State& s);           // Check if fall currently active
-  void clearFallActive(State& s);        // Clear fall state (button only!)
-  imuData getLatestIMU(State& s);        // Get most recent sensor reading
-  
-  // IMU operations
-  void readIMU(State& s, imuData &data);              // Read sensor
-  SafetyEvent analyzeIMUData(State& s, const imuData &data);  // Analyze for falls
-}
-```
-
-### Hardware Function (outside namespace)
-```cpp
-bool setupIMU();  // Initialize MPU6050 hardware
 ```
