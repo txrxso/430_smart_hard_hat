@@ -50,6 +50,23 @@ namespace IMUTaskManager {
         s.gyroWindow[i] = 0.0;
       }
       s.windowIndex = 0;
+      
+      // Initialize detection state
+      s.detectionState.currentState = InternalSafetyState::NORMAL;
+      s.detectionState.detectedEvent = SafetyEvent::NONE;
+      s.detectionState.freefallStartTime = 0;
+      s.detectionState.impactStartTime = 0;
+      s.detectionState.motionlessStartTime = 0;
+      s.detectionState.lastReadTime = millis();
+      s.detectionState.prevResultantAcc = 1.0;
+      s.detectionState.prevAccTime = millis();
+      s.detectionState.prev2ResultantAcc = 1.0;
+      s.detectionState.prev2AccTime = millis();
+      s.detectionState.prev3ResultantAcc = 1.0;
+      s.detectionState.prev3AccTime = millis();
+      s.detectionState.preEventOrientation[0] = 0.0;
+      s.detectionState.preEventOrientation[1] = 0.0;
+      s.detectionState.preEventOrientation[2] = 1.0;
     }
 
   // helper to store fall data
@@ -88,6 +105,55 @@ namespace IMUTaskManager {
     }
   }
 
+  // helper to update history after jerk calculation
+  static void updateJerkHistory(InternalDetectionState &d, float currentAcc, uint32_t currentTime) {
+    d.prev3ResultantAcc = d.prev2ResultantAcc;
+    d.prev3AccTime = d.prev2AccTime;
+    d.prev2ResultantAcc = d.prevResultantAcc;
+    d.prev2AccTime = d.prevAccTime;
+    d.prevResultantAcc = currentAcc;
+    d.prevAccTime = currentTime;
+  }
+
+  static float getJerk(float sample1, float sample2, float timeDelta_sec) {
+    // sample 2 is the one ahead in time, sample 1 is the one behind in time
+    if (timeDelta_sec <= 0) {
+      return 0; // avoid division by zero, treat as no jerk
+    }
+    return (sample2 - sample1) / timeDelta_sec;
+  }
+
+  // helper to calculate jerk with individual time deltas
+  static float calcJerk(InternalDetectionState &d, float currentAcc, uint32_t currentTime) {
+    // Calculate individual jerks with their actual time deltas
+    float dt1 = (currentTime - d.prevAccTime) / 1000.0;
+    float dt2 = (d.prevAccTime - d.prev2AccTime) / 1000.0;
+    float dt3 = (d.prev2AccTime - d.prev3AccTime) / 1000.0;
+    
+    // Avoid division by zero
+    if (dt1 <= 0) dt1 = 0.01;
+    if (dt2 <= 0) dt2 = 0.01;
+    if (dt3 <= 0) dt3 = 0.01;
+    
+    float jerk1 = getJerk(d.prevResultantAcc, currentAcc, dt1);
+    float jerk2 = getJerk(d.prev2ResultantAcc, d.prevResultantAcc, dt2);
+    float jerk3 = getJerk(d.prev3ResultantAcc, d.prev2ResultantAcc, dt3);
+
+    float smoothedJerk = (abs(jerk1) + abs(jerk2) + abs(jerk3)) / 3.0;
+    return smoothedJerk;
+  }
+  
+  // Check if person is lying horizontally (gravity in x-y plane, not z)
+  static bool checkPostImpactOrientation(float ax, float ay, float az) {
+    float horizontal_acc = sqrt(ax*ax + ay*ay);
+    float vertical_acc = abs(az);
+    
+    // Horizontal if gravity is mostly in x-y plane
+    // Standing: az ≈ 1g, horizontal ≈ 0
+    // Lying down: az ≈ 0, horizontal ≈ 1g
+    return (horizontal_acc > 0.7 && vertical_acc < 0.5);
+  }
+
   void readIMU(State& s, imuData &data) {
     #if IMU_DEBUG == 2 
     Serial.println("Reading IMU data...");
@@ -111,70 +177,220 @@ namespace IMUTaskManager {
   }
 
   SafetyEvent analyzeIMUData(State& s, const imuData &data) {
-    #if IMU_DEBUG == 2
-    Serial.println("Analyzing IMU data...");
-    #endif
-    // add to circular buffer
+    InternalDetectionState& d = s.detectionState;
+    
+    // Get current time
+    uint32_t currentTime = millis();
+    
+    // Update window BEFORE state machine
     s.accelWindow[s.windowIndex] = data.resultant_acc;
     s.gyroWindow[s.windowIndex] = data.resultant_gyro;
-    s.windowIndex = (s.windowIndex + 1) % WINDOW_SIZE; // find next index in circular buffer
-
-    // count samples exceeding thresholds
-    int heavyImpactCount = 0;
-    // int highRotationCount = 0;
-    int highAccRotationCount = 0; // combined condition for high rotation and high acceleration
-    int mediumImpactCount = 0;
-    int freefallCount = 0;
-
-    for (int i = 0; i < WINDOW_SIZE; i++) {
-      
-      if (s.accelWindow[i] >= HEAVY_IMPACT_THRESHOLD_G) {
-        heavyImpactCount++;
-      }
-      else if (s.accelWindow[i] >= MEDIUM_IMPACT_THRESHOLD_G) {
-        mediumImpactCount++;
-      }
-
-      // count samples with BOTH impact and rotation
-      if (s.accelWindow[i] >= MEDIUM_IMPACT_THRESHOLD_G && s.gyroWindow[i] >= ROTATION_THRESHOLD_DEG_S) {
-        highAccRotationCount++;
-      }
-      
-      if (s.accelWindow[i] <= FREEFALL_THRESHOLD_G) {
-        freefallCount++;
-      }
-    }
-
-    // check that counts exceed required number of samples in the buffer to be considered
-    if (heavyImpactCount >= SUSTAINED_THRESHOLD) {
-      #if IMU_DEBUG == 1 
-      Serial.println("HEAVY IMPACT.");
+    s.windowIndex = (s.windowIndex + 1) % WINDOW_SIZE;
+    
+    // Calculate jerk
+    float jerk = calcJerk(d, data.resultant_acc, currentTime);
+    
+    #if IMU_DEBUG == 2
+    Serial.printf("State: %d, Acc: %.2f, Jerk: %.1f, Gyro: %.1f\n", 
+                  (int)d.currentState, data.resultant_acc, jerk, data.resultant_gyro);
+    #endif
+    
+    // ========================================
+    // TIER 1: SEVERE IMPACT - IMMEDIATE ALERT
+    // ========================================
+    if (data.resultant_acc > SEVERE_IMPACT_THRESHOLD_G) {
+      #if IMU_DEBUG == 1
+      Serial.printf("SEVERE IMPACT: %.2fg - IMMEDIATE ALERT\n", data.resultant_acc);
       #endif
+      
+      d.currentState = InternalSafetyState::INJURY_LIKELY;
+      d.detectedEvent = SafetyEvent::HEAVY_IMPACT;
+      updateJerkHistory(d, data.resultant_acc, currentTime);
       return SafetyEvent::HEAVY_IMPACT;
     }
-    else if (mediumImpactCount >= SUSTAINED_THRESHOLD) {
-      #if IMU_DEBUG == 1 
-      Serial.println("MEDIUM IMPACT.");
-      #endif
-      return SafetyEvent::MEDIUM_IMPACT;
+    
+    // ========================================
+    // TIER 2: STATE MACHINE
+    // ========================================
+    
+    switch (d.currentState) {
+      
+      case InternalSafetyState::NORMAL: {
+        
+        // Path A: Freefall detected (likely fall)
+        if (data.resultant_acc < FREEFALL_THRESHOLD_G) {
+          d.freefallStartTime = currentTime;
+          d.detectedEvent = SafetyEvent::FALL;
+          d.currentState = InternalSafetyState::FREEFALL;
+          
+          // Store pre-fall orientation
+          d.preEventOrientation[0] = data.accX;
+          d.preEventOrientation[1] = data.accY;
+          d.preEventOrientation[2] = data.accZ;
+          
+          #if IMU_DEBUG == 1
+          Serial.println("Freefall detected - monitoring for FALL");
+          #endif
+        }
+        
+        // Path B: Moderate impact with high jerk (direct impact)
+        else if (data.resultant_acc > MEDIUM_IMPACT_THRESHOLD_G && 
+                 jerk > JERK_THRESHOLD_G_PER_S) {
+          
+          // Window validation: check if sustained
+          int impactCount = 0;
+          for (int i = 0; i < WINDOW_SIZE; i++) {
+            if (s.accelWindow[i] > MEDIUM_IMPACT_THRESHOLD_G) {
+              impactCount++;
+            }
+          }
+          
+          // If sustained (2/3 samples high), it's real
+          if (impactCount >= SUSTAINED_THRESHOLD) {
+            d.impactStartTime = currentTime;
+            d.detectedEvent = SafetyEvent::DIRECT_IMPACT;
+            d.currentState = InternalSafetyState::IMPACT;
+            
+            #if IMU_DEBUG == 1
+            Serial.printf("Direct impact: %.2fg, jerk: %.1f g/s (sustained: %d/%d)\n", 
+                          data.resultant_acc, jerk, impactCount, WINDOW_SIZE);
+            #endif
+          }
+        }
+        
+        // Path C: High rotation + moderate acceleration
+        else if (data.resultant_gyro > ROTATION_THRESHOLD_DEG_S && 
+                 data.resultant_acc > MEDIUM_IMPACT_THRESHOLD_G) {
+          d.impactStartTime = currentTime;
+          d.detectedEvent = SafetyEvent::DIRECT_IMPACT;
+          d.currentState = InternalSafetyState::IMPACT;
+          
+          #if IMU_DEBUG == 1
+          Serial.printf("Rotational impact: %.1f deg/s, %.2fg\n", 
+                        data.resultant_gyro, data.resultant_acc);
+          #endif
+        }
+        
+        break;
+      }
+      
+      case InternalSafetyState::FREEFALL: {
+        uint32_t freefallDuration = currentTime - d.freefallStartTime;
+        
+        // Freefall to Impact transition (WITH jerk validation)
+        if (data.resultant_acc > MEDIUM_IMPACT_THRESHOLD_G && 
+            jerk > JERK_THRESHOLD_G_PER_S) {
+          
+          // Validate timing
+          if (freefallDuration >= MIN_FREEFALL_DURATION_MS && 
+              freefallDuration <= MAX_FREEFALL_TO_IMPACT_MS) {
+            d.impactStartTime = currentTime;
+            d.currentState = InternalSafetyState::IMPACT;
+            
+            #if IMU_DEBUG == 1
+            Serial.printf("FALL impact: freefall %lums → impact %.2fg\n", 
+                          freefallDuration, data.resultant_acc);
+            #endif
+          } 
+          else {
+            // Invalid timing pattern (e.g., phone dropped)
+            d.currentState = InternalSafetyState::RECOVERED;
+            
+            #if IMU_DEBUG == 1
+            Serial.printf("Invalid freefall timing (%lums) - recovery\n", freefallDuration);
+            #endif
+          }
+        }
+        // Timeout - caught themselves, avoided fall
+        else if (freefallDuration > MAX_FREEFALL_TO_IMPACT_MS) {
+          d.currentState = InternalSafetyState::RECOVERED;
+          
+          #if IMU_DEBUG == 1
+          Serial.println("Freefall timeout - caught self, recovery");
+          #endif
+        }
+        
+        break;
+      }
+      
+      case InternalSafetyState::IMPACT: {
+        uint32_t timeSinceImpact = currentTime - d.impactStartTime;
+        
+        // Wait brief period to observe post-impact behavior
+        if (timeSinceImpact > POST_IMPACT_OBS_DURATION_MS) {
+          d.currentState = InternalSafetyState::POST_IMPACT;
+          d.motionlessStartTime = currentTime;
+          
+          #if IMU_DEBUG == 2
+          Serial.println("Entering POST_IMPACT observation");
+          #endif
+        }
+        
+        break;
+      }
+      
+      case InternalSafetyState::POST_IMPACT: {
+        // Check orientation
+        bool isHorizontal = checkPostImpactOrientation(data.accX, data.accY, data.accZ);
+        
+        // Check if motionless
+        bool isMotionless = (abs(data.resultant_acc - 1.0) < MOTIONLESS_ACC_THRESHOLD && 
+                             data.resultant_gyro < MOTIONLESS_GYRO_THRESHOLD_DEG_S);
+        
+        if (isHorizontal && isMotionless) {
+          // Person is lying down and not moving - likely injured
+          uint32_t stationaryDuration = currentTime - d.motionlessStartTime;
+          
+          if (stationaryDuration > MOTIONLESS_THRESHOLD_MS) {
+            d.currentState = InternalSafetyState::INJURY_LIKELY;
+            
+            #if IMU_DEBUG == 1
+            Serial.printf("INJURY CONFIRMED: %s - Horizontal & motionless for %lums\n",
+                          (d.detectedEvent == SafetyEvent::FALL) ? "FALL" : "DIRECT_IMPACT",
+                          stationaryDuration);
+            #endif
+            
+            updateJerkHistory(d, data.resultant_acc, currentTime);
+            return d.detectedEvent;
+          }
+        } 
+        else if (!isMotionless) {
+          // Person is moving - probably recovered
+          d.currentState = InternalSafetyState::RECOVERED;
+          
+          #if IMU_DEBUG == 1
+          Serial.println("Movement detected after impact - RECOVERED");
+          #endif
+        }
+        else {
+          // Not horizontal yet but motionless - reset timer
+          d.motionlessStartTime = currentTime;
+        }
+        
+        break;
+      }
+      
+      case InternalSafetyState::INJURY_LIKELY: {
+        // Stay in this state, continue returning detected event
+        updateJerkHistory(d, data.resultant_acc, currentTime);
+        return d.detectedEvent;
+      }
+      
+      case InternalSafetyState::RECOVERED: {
+        // Reset to normal
+        d.currentState = InternalSafetyState::NORMAL;
+        d.detectedEvent = SafetyEvent::NONE;
+        
+        #if IMU_DEBUG == 1
+        Serial.println("State reset to NORMAL");
+        #endif
+        
+        break;
+      }
     }
-
-    else if (highAccRotationCount >= SUSTAINED_THRESHOLD) { 
-      return SafetyEvent::HIGH_ROTATION_AND_ACC;
-    }
-
-    else if (freefallCount >= SUSTAINED_THRESHOLD) {
-      #if IMU_DEBUG == 1 
-      Serial.println("FREEFALL.");
-      #endif
-      return SafetyEvent::FREEFALL;
-    }
-    else {
-      #if IMU_DEBUG == 1 
-      Serial.println("NO IMU SAFETY EVENT.");
-      #endif
-      return SafetyEvent::NONE;
-    }
+    
+    updateJerkHistory(d, data.resultant_acc, currentTime);
+    return SafetyEvent::NONE;
   }
 
   imuData getLatestIMUData(State& s) {
@@ -229,6 +445,8 @@ namespace IMUTaskManager {
   void clearFallActive(State& s){
     s.fallActive = false;
     memset(&s.originalFallAlert, 0, sizeof(AlertPayload)); // clear original fall alert data
+    s.detectionState.currentState = InternalSafetyState::NORMAL;
+    s.detectionState.detectedEvent = SafetyEvent::NONE;
   } // to be called when cancel button is pressed to clear fall state and stop sending alerts
 
 }
