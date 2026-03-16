@@ -125,6 +125,10 @@ void heartbeatRequestTask(void * parameter) {
   #if HEARTBEAT_DEBUG
   Serial.println("Heartbeat Request Task started.");
   #endif
+  
+  // Wait 5 seconds after power-on before sending first heartbeat request
+  vTaskDelay(pdMS_TO_TICKS(5000));
+  
   TickType_t prevWakeTime = xTaskGetTickCount(); // keep track of time to use for next wake up for interval 
   const TickType_t heartbeatInterval = pdMS_TO_TICKS(HEARTBEAT_INTERVAL_MIN * 60 * 1000);
 
