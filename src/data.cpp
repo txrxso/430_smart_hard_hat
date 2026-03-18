@@ -21,7 +21,7 @@ const char* alertTypeToString(AlertType type) {
 bool serializeAP(const AlertPayload& alert, char* buffer, size_t bufferSize) { 
 
   int len = snprintf(buffer, bufferSize,
-    "{\"event\":\"%s\",\"datetime\":\"%s\",\"latitude\":%.6f,\"longitude\":%.6f,\"altitude\":%.2f,\"noise_db\":%u,\"fall_detection\":%.2f,\"aqi_uba\":%u,\"aqi_pm25_us\":%u,\"aqi_pm100_us\":%u}",
+    "{\"worker_id\": 10,\"event\":\"%s\",\"datetime\":\"%s\",\"latitude\":%.6f,\"longitude\":%.6f,\"altitude\":%.2f,\"noise_db\":%u,\"fall_detection\":%.2f,\"aqi_uba\":%u,\"aqi_pm25_us\":%u,\"aqi_pm100_us\":%u}",
     alertTypeToString(alert.event),
     alert.dateTime,
     alert.latitude,
