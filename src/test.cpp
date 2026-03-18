@@ -1,5 +1,9 @@
 #include "test.h"
 
+#if DUTY_CYCLE
+QueueHandle_t dutyCycleQueue = NULL; // actual definition
+#endif
+
 bool serializeIMULog(const IMULogPayload& log, char* buffer, size_t bufferSize) {
   int len = snprintf(buffer, bufferSize,
     "{\"ts\":%lu,\"ax\":%.3f,\"ay\":%.3f,\"az\":%.3f,\"gx\":%.1f,\"gy\":%.1f,\"gz\":%.1f,"

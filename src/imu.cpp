@@ -44,6 +44,10 @@ namespace IMUTaskManager {
       s.gpsEventGroup = gpsEventGroup;
       s.mqttPublishEventGroup = mqttPublishEventGroup;
 
+      #if ENABLE_IMU_LOGGING
+      s.imuLoggingQueue = NULL; // will be set from main.cpp
+      #endif
+
       // Initialize windows (cannot init accel as 0 b/c that would be free fall case)
       for (int i = 0; i < WINDOW_SIZE; i++) {
         s.accelWindow[i] = 1.0;
@@ -400,6 +404,12 @@ namespace IMUTaskManager {
   void run(State& s){ // main loop for IMU task, never returns
     imuData data; 
 
+    #if ENABLE_IMU_LOGGING
+    const uint32_t LOG_INTERVAL_MS = 10; // every 10 ms (100 Hz)
+    const uint32_t LOG_INTERVAL_TICKS = pdMS_TO_TICKS(LOG_INTERVAL_MS);
+    uint32_t lastLogTime = 0;
+    #endif
+
     while (true) {
       readIMU(s, data); // read and store latest IMU data in state
       if (s.imuQueue != NULL) { 
@@ -409,6 +419,34 @@ namespace IMUTaskManager {
 
       SafetyEvent event = analyzeIMUData(s, data);
 
+      #if ENABLE_IMU_LOGGING  // do not alert, only send the raw payload
+      // log values in payload format every interval 
+      uint32_t currentTime = millis();
+      if (currentTime - lastLogTime >= LOG_INTERVAL_MS) {
+
+        IMULogPayload logPayload;
+        logPayload.accel_x = data.accX;
+        logPayload.accel_y = data.accY;
+        logPayload.accel_z = data.accZ;
+        logPayload.gyro_x = data.gyroX;
+        logPayload.gyro_y = data.gyroY;
+        logPayload.gyro_z = data.gyroZ;
+        logPayload.resultant_acc = data.resultant_acc;
+        logPayload.resultant_gyro = data.resultant_gyro;
+        logPayload.safetyState = static_cast<uint8_t>(s.detectionState.currentState);
+        logPayload.detectedEvent = static_cast<uint8_t>(s.detectionState.detectedEvent);
+        logPayload.jerk = calcJerk(s.detectionState, data.resultant_acc, currentTime);
+        logPayload.is_freefall = (s.detectionState.currentState == InternalSafetyState::FREEFALL);
+        logPayload.is_horizontal = checkPostImpactOrientation(data.accX, data.accY, data.accZ);
+        logPayload.is_motionless = (abs(data.resultant_acc - 1.0) < MOTIONLESS_ACC_THRESHOLD && 
+                                    data.resultant_gyro < MOTIONLESS_GYRO_THRESHOLD_DEG_S);
+        logPayload.timestamp_ms = millis();
+        xQueueSend(s.imuLoggingQueue, &logPayload, pdMS_TO_TICKS(5)); // send to logging queue
+        xEventGroupSetBits(s.mqttPublishEventGroup, PUBLISH_IMU_LOG_BIT); // signal mqtt task to publish
+        lastLogTime = currentTime;
+      }
+
+      #else // do normal alerting
       // check for a new fall 
       if (event != SafetyEvent::NONE && !s.fallActive && !isCancelActive()) {
         AlertPayload alertToSend;
@@ -432,6 +470,7 @@ namespace IMUTaskManager {
         sendAlert(s, alertToResend);
 
       }
+      #endif 
 
       vTaskDelay(pdMS_TO_TICKS(IMU_READ_INTERVAL_MS)); // delay before next read      
     }

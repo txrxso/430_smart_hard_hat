@@ -114,6 +114,10 @@ namespace IMUTaskManager {
     QueueHandle_t alertPublishQueue; // already a pointer
     EventGroupHandle_t mqttPublishEventGroup;
     EventGroupHandle_t gpsEventGroup;
+
+    #if ENABLE_IMU_LOGGING
+    QueueHandle_t imuLoggingQueue; // for logging raw IMU data and events for offline analysis
+    #endif
   };
 
 

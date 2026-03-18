@@ -20,6 +20,7 @@ extern EventGroupHandle_t mqttPublishEventGroup;
 #define PUBLISH_MANUAL_ALERT_BIT (1 << 2) 
 #define PUBLISH_MANUAL_CLEAR_BIT (1 << 3)
 #define PUBLISH_HEARTBEAT_BIT (1 << 4) // thinking of adding this to its own publish category because the mqttPublishTask will be highest priority (e.g., alert, CAN alert needs to be sent)
+#define PUBLISH_IMU_LOG_BIT (1 << 5) // for test logging of IMU data
 
 // define a separate health event group to monitor CAN bus health, etc. (e.g., future improvement could be battery power?)
 extern EventGroupHandle_t mqttPublishHealthGroup;

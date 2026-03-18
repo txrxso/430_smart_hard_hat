@@ -15,6 +15,7 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 #include "wifi_config.h"  // config and credentials
 #include "mqtt_config.h"
 
+#include "test.h"
 #include "imu.h"
 #include "gps.h"
 #include "data.h"
@@ -23,11 +24,10 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 #include "debug.h"
 #include "certs.h"
 
+// Wifi Configuration
 #include "esp_wifi.h"
-
 // CAN 
 #include <driver/twai.h>
-
 // FreeRTOS
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -36,46 +36,6 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 
 // define DEBUG mode to print stuff
 #define HEARTBEAT_INTERVAL_MIN 5  // set to 5 minutes // in minutes
-
-#if DUTY_CYCLE
-#include <esp_timer.h>
-
-struct DutyCycleStats {
-  char event_type;            // 'H'=Heartbeat, 'A'=Alert, 'W'=WiFi, 'M'=MQTT
-  uint32_t esp32_timestamp_ms; // millis() when event occurred
-  uint32_t duration_us;        // Duration of transmission in microseconds
-  bool success;                // Was transmission successful
-};
-
-QueueHandle_t dutyCycleQueue = NULL; // queue for sending duty cycle stats from tasks to logger task
-#define DC_QUEUE_SIZE 50 
-
-// helper to log without blocking main task execution 
-inline void logDutyCycle(char event_type, uint64_t duration_us, bool success) {
-  DutyCycleStats stats = {event_type, (uint32_t)millis(), (uint32_t)duration_us, success};
-  if (dutyCycleQueue != NULL) {
-    xQueueSend(dutyCycleQueue, &stats, 0); // non-blocking send
-  }
-}
-
-// task to drain queue and print stats to serial
-void dutyCycleLogTask(void *parameter) { 
-  DutyCycleStats stats;
-  
-  // Startup indicator
-  Serial.println("DUTY_CYCLE_TASK_STARTED");
-  
-  while (true) {
-    if (xQueueReceive(dutyCycleQueue, &stats, pdMS_TO_TICKS(100)) == pdTRUE) {
-      // CSV format: event_type,esp32_timestamp_ms,duration_us,success
-      Serial.printf("%c,%lu,%lu,%d\n", stats.event_type, stats.esp32_timestamp_ms, 
-                    stats.duration_us, stats.success ? 1 : 0);
-    }
-    vTaskDelay(pdMS_TO_TICKS(10)); // fast drain
-  }
-}
-
-#endif
 
 // for maintaining connection state
 #if ENABLE_TLS 
@@ -441,6 +401,17 @@ void mqttPublishTask(void * parameter) {
   // static buffers for JSON payloads
   char alertPayloadBuffer[512];
   char heartbeatPayloadBuffer[512];
+  #if ENABLE_IMU_LOGGING
+  char buffer[256];
+  #endif
+
+  // build bits to wait for 
+  EventBits_t bitsToWaitFor = PUBLISH_IMU_THRESHOLD_BIT | PUBLISH_CAN_ALERT_BIT | 
+                            PUBLISH_MANUAL_ALERT_BIT | PUBLISH_MANUAL_CLEAR_BIT | 
+                            PUBLISH_HEARTBEAT_BIT;
+  #if ENABLE_IMU_LOGGING
+  bitsToWaitFor |= PUBLISH_IMU_LOG_BIT;
+  #endif 
 
   while (true) { 
     // maintain wifi connection 
@@ -476,12 +447,10 @@ void mqttPublishTask(void * parameter) {
     // !!!! ONLY WANT EVENT DRIVEN PUBLISHING TO REDUCE WIFI USAGE AND POWER CONSUMPTION
     EventBits_t bits = xEventGroupWaitBits(
       mqttPublishEventGroup, 
-      PUBLISH_IMU_THRESHOLD_BIT | PUBLISH_CAN_ALERT_BIT | 
-      PUBLISH_MANUAL_ALERT_BIT | PUBLISH_MANUAL_CLEAR_BIT | 
-      PUBLISH_HEARTBEAT_BIT, // bits within event group to wait for 
+      bitsToWaitFor, 
       pdTRUE,  // clear bits on exit
       pdFALSE, // wait for any bit
-      pdMS_TO_TICKS(1000) // timeout after 1 second
+      pdMS_TO_TICKS(700) // timeout after this many ms
     );
 
     // if any bits are set, then some kind of MQTT publish task is required.  
@@ -559,9 +528,9 @@ void mqttPublishTask(void * parameter) {
       }
 
     }
-    
 
-    else if (bits & PUBLISH_HEARTBEAT_BIT) {
+    // Check heartbeat bit independently - can be set at same time as alerts
+    if (bits & PUBLISH_HEARTBEAT_BIT) {
       HeartbeatPayload hbToSend;
       
       // process all hbs in queue 
@@ -607,7 +576,41 @@ void mqttPublishTask(void * parameter) {
 
 
     }
-    vTaskDelay(pdMS_TO_TICKS(50)); 
+    
+    // Check logging bit independently - lowest priority, can be set with other bits
+    #if ENABLE_IMU_LOGGING
+    if (bits & PUBLISH_IMU_LOG_BIT) {
+      IMULogPayload imuLogEntryBuffer;
+      if (xQueueReceive(imuState.imuLoggingQueue, &imuLogEntryBuffer, 0) == pdTRUE) {
+        // prepare JSON payload
+        if (serializeIMULog(imuLogEntryBuffer, buffer, sizeof(buffer))) {
+          bool success = mqttClient.publish(MQTT_TOPIC_IMU_DAQ, buffer);
+
+          if (!success) {
+            #if MQTT_DEBUG
+            Serial.println("MQTT IMU log publish failed.");
+            #endif
+            // for logging, we can just drop the message if failed to publish since it's not critical data
+          } 
+          else {
+            #if MQTT_DEBUG
+            Serial.println("MQTT IMU log published successfully.");
+            Serial.println(buffer);
+            #endif
+          }
+        }
+        else {
+          #if MQTT_DEBUG
+          Serial.println("Failed to serialize IMU log payload to JSON.");
+          #endif
+          // skip to next log entry if serialization failed
+        }
+
+      }
+    }
+    #endif
+
+    vTaskDelay(pdMS_TO_TICKS(100)); 
 
   }
 
@@ -625,6 +628,11 @@ void manualAlertTask(void * parameter) {
 void imuTask(void * parameter) {
   IMUTaskManager::State* state = (IMUTaskManager::State*)parameter;
   IMUTaskManager::init(*state, imuQueue, gpsQueue, alertPublishQueue, mqttPublishEventGroup, gpsEventGroup);
+  #if ENABLE_IMU_LOGGING
+  QueueHandle_t imuLoggingQueue = xQueueCreate(50, sizeof(IMULogPayload)); // create logging queue
+  state->imuLoggingQueue = imuLoggingQueue; // set pointer in state so can be used within imu.cpp
+  #endif
+
   IMUTaskManager::run(*state);
 }
 
@@ -661,17 +669,7 @@ void setup(void) {
   } 
 
   #if DUTY_CYCLE
-  dutyCycleQueue = xQueueCreate(DC_QUEUE_SIZE, sizeof(DutyCycleStats));
-  xTaskCreatePinnedToCore(
-    dutyCycleLogTask,
-    "DutyCycleLogTask",
-    2048,
-    NULL,
-    1,  // increased from 0 - needs to run to drain queue
-    NULL,
-    1   // pin to core 1
-  );
-  Serial.println("DUTY_CYCLE_START"); // marker for Python script
+  startDutyCycleTask();
   #endif
 
   mqttPublishEventGroup = xEventGroupCreate();
