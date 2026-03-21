@@ -108,7 +108,7 @@ struct AlertPayload {
   double longitude;
   double altitude;
   uint16_t noise_db;
-  double fall_detection; // 0 or 1 to indicate fall detected
+  double fall_detection; // 0 or 1 to indicate fall detected, 2 to indicate SOS 
   uint16_t aqi_uba;
   uint16_t aqi_pm25_us;
   uint16_t aqi_pm100_us;

@@ -75,11 +75,12 @@ bool gpsRead(gpsData &data) {
 
 #else 
 bool gpsRead(gpsData &data) { 
-  // update gps data structure with latest values from gps and return true if location updated
+  // update gps data structure with latest values from gps and return true if got any new data
   // timeout after 500 ms if no new data 
 
   unsigned long start = millis();
-  bool gotUpdate = false;
+  bool gotLocationUpdate = false;
+  bool gotTimeUpdate = false;
 
   while (true) {
     while (gpsSerial.available() > 0) {
@@ -94,26 +95,41 @@ bool gpsRead(gpsData &data) {
       data.altitude = gps.altitude.meters();
       data.hdop = gps.hdop.value() / 100.0;
       data.satellites = gps.satellites.value();
-      gotUpdate = true;
+      gotLocationUpdate = true;
     }
 
     // check if valid time data
     if (gps.date.isValid() && gps.time.isValid()) {
-      snprintf(data.dateTime, sizeof(data.dateTime),
-                "%04d/%02d/%02d,%02d:%02d:%02d",
-                gps.date.year(),
-                gps.date.month(),
-                gps.date.day(),
-                gps.time.hour(),
-                gps.time.minute(),
-                gps.time.second());
-      gotUpdate = true;
+      // Additional sanity checks for GPS datetime
+      // GPS module can output "valid" but nonsensical dates (e.g., 2010/00/00)
+      uint16_t year = gps.date.year();
+      uint8_t month = gps.date.month();
+      uint8_t day = gps.date.day();
+      
+      // Check if datetime is actually reasonable
+      // Year should be at least 2020 (firmware era), month 1-12, day 1-31
+      if (year >= 2020 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        snprintf(data.dateTime, sizeof(data.dateTime),
+                  "%04d/%02d/%02d,%02d:%02d:%02d",
+                  year, month, day,
+                  gps.time.hour(),
+                  gps.time.minute(),
+                  gps.time.second());
+        gotTimeUpdate = true;
+      } else {
+        // GPS returned "valid" but nonsensical date - treat as invalid
+        snprintf(data.dateTime, sizeof(data.dateTime), "Invalid");
+        #if GPS_DEBUG
+        Serial.printf("[GPS] Rejected invalid date: %04d/%02d/%02d\n", year, month, day);
+        #endif
+      }
     } else {
       snprintf(data.dateTime, sizeof(data.dateTime), "Invalid");
     }
 
-    if (gotUpdate) {
-      return true; // exit early if updated
+    // return true if we got either location or time update
+    if (gotLocationUpdate || gotTimeUpdate) {
+      return true;
     }
 
     if (millis() - start > 500) {
@@ -184,15 +200,20 @@ namespace GPSTaskManager {
     } // void init()
 
     // helper: process fresh GPS data and update state
-    static void processData(State& s, const gpsData &newData) {
-        // only overwrite coordinates if got valid fix - if no fix, keep last known coordinates (could be from previous run or previous valid reading in this run)
-        if (newData.latitude != 0.0 && newData.longitude != 0.0) { 
+    static void processData(State& s, const gpsData &newData, bool hasLocation) {
+        // only overwrite coordinates if we have a valid location fix from GPS
+        // hasLocation flag indicates that location data was actively updated by GPS
+        if (hasLocation && newData.latitude != 0.0 && newData.longitude != 0.0) { 
           // copy all GPS values from fresh reading to the state's last valid cache
           s.lastValidGPS.latitude = newData.latitude;
           s.lastValidGPS.longitude = newData.longitude;
           s.lastValidGPS.altitude = newData.altitude;
           s.lastValidGPS.hdop = newData.hdop;
           s.lastValidGPS.satellites = newData.satellites;
+          
+          #if GPS_DEBUG
+          Serial.printf("Updated GPS location: lat=%.6f, lon=%.6f\n", newData.latitude, newData.longitude);
+          #endif
         }
         
 
@@ -227,7 +248,8 @@ namespace GPSTaskManager {
         // event-triggered request received, attempt to read 
         gpsData fresh = {};
         if (gpsRead(fresh)) {
-            processData(s, fresh); // update state with fresh data
+            bool hasLocation = (fresh.latitude != 0.0 && fresh.longitude != 0.0);
+            processData(s, fresh, hasLocation); // update state with fresh data
             updateQueue(s); // push to queue for others to read
             xEventGroupSetBits(s.gpsEventGroup, GPS_READ_SUCCESS_BIT); // mark read success
             return true;
@@ -244,7 +266,8 @@ namespace GPSTaskManager {
     static void handlePeriodicRead(State& s) {
         gpsData fresh = {};
         if (gpsRead(fresh)) {
-            processData(s, fresh); // update state with fresh data
+            bool hasLocation = (fresh.latitude != 0.0 && fresh.longitude != 0.0);
+            processData(s, fresh, hasLocation); // update state with fresh data
         }
          updateQueue(s); // even if read failed, still update queue with latest cached GPS data and computed datetime (if have synced before)
 

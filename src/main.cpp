@@ -35,7 +35,7 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 #include <freertos/queue.h>
 
 // define DEBUG mode to print stuff
-#define HEARTBEAT_INTERVAL_MIN 5  // set to 5 minutes // in minutes
+#define HEARTBEAT_INTERVAL_MIN 0.5  // set to 5 minutes // in minutes
 
 // for maintaining connection state
 #if ENABLE_TLS 

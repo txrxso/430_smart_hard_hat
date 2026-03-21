@@ -224,6 +224,7 @@ void run(State& s) {
                 AlertPayload manualAlertPayload;
                 memset(&manualAlertPayload, 0, sizeof(manualAlertPayload));
                 manualAlertPayload.event = MANUAL_ALERT;
+                manualAlertPayload.fall_detection = 2; // use 2 to indicate SOS b/c 1 is for fall 
                 attachGPSToAlert(manualAlertPayload, s.gpsEventGroup, s.gpsQueue);
                 
                 // Store this as the original manual alert for continuous streaming
