@@ -68,7 +68,7 @@ def log_latency(host, port, hb_topic, alert_topic, username=None, password=None)
 
         signal.signal(signal.SIGINT, handle_exit)
 
-        client = mqtt.Client()
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1)
 
         if username and password:
             client.username_pw_set(username, password)
@@ -80,8 +80,28 @@ def log_latency(host, port, hb_topic, alert_topic, username=None, password=None)
                 # subscribe to the topics
                 client.subscribe(hb_topic)
                 client.subscribe(alert_topic)
+                print(f"Subscribed to topics: {hb_topic}, {alert_topic}")
             else: 
                 print(f"Failed to connect; return code: {rc}")
+                if rc == 1:
+                    print("Connection refused - incorrect protocol version")
+                elif rc == 2:
+                    print("Connection refused - invalid client identifier")
+                elif rc == 3:
+                    print("Connection refused - server unavailable")
+                elif rc == 4:
+                    print("Connection refused - bad username or password")
+                elif rc == 5:
+                    print("Connection refused - not authorized")
+
+        def on_disconnect(client, userdata, rc):
+            if rc != 0:
+                print(f"Unexpected disconnection. Return code: {rc}")
+            else:
+                print("Disconnected successfully")
+
+        def on_log(client, userdata, level, buf):
+            print(f"[MQTT LOG] {buf}")
 
 
         def on_message(client, userdata, msg):
@@ -148,9 +168,18 @@ def log_latency(host, port, hb_topic, alert_topic, username=None, password=None)
 
         client.on_connect = on_connect
         client.on_message = on_message
+        client.on_disconnect = on_disconnect
+        client.on_log = on_log  # Enable debug logging
+        
         print(f"Connecting to {host}:{port}...")
-        client.connect(host, port, keepalive=300)
-        client.loop_forever()
+        print(f"Using TLS: {username and password}")
+        try:
+            client.connect(host, port, keepalive=300)
+            print("Connection initiated, entering loop...")
+            client.loop_forever()
+        except Exception as e:
+            print(f"Connection error: {e}")
+            return 1
 
     return 0
 
