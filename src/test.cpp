@@ -7,7 +7,7 @@ QueueHandle_t dutyCycleQueue = NULL; // actual definition
 bool serializeIMULog(const IMULogPayload& log, char* buffer, size_t bufferSize) {
   int len = snprintf(buffer, bufferSize,
     "{\"ts\":%lu,\"ax\":%.3f,\"ay\":%.3f,\"az\":%.3f,\"gx\":%.1f,\"gy\":%.1f,\"gz\":%.1f,"
-    "\"r_acc\":%.3f,\"r_gyro\":%.1f,\"event\":%u,\"state\":%u,\"jerk\":%.1f,"
+    "\"r_acc\":%.3f,\"r_gyro\":%.1f,\"state\":%u,\"event\":%u,\"jerk\":%.1f,"
     "\"freefall\":%d,\"horizontal\":%d,\"motionless\":%d}",
     log.timestamp_ms,
     log.accel_x, log.accel_y, log.accel_z,
