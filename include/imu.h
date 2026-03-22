@@ -10,6 +10,7 @@
 #include <math.h>
 #include "data.h"
 #include "debug.h"
+#include "test.h"
 
 // ============================================
 // THRESHOLDS AND PARAMETERS FOR IMU ANALYSIS

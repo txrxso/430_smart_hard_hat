@@ -408,6 +408,7 @@ namespace IMUTaskManager {
     const uint32_t LOG_INTERVAL_MS = 10; // every 10 ms (100 Hz)
     const uint32_t LOG_INTERVAL_TICKS = pdMS_TO_TICKS(LOG_INTERVAL_MS);
     uint32_t lastLogTime = 0;
+    bool firstLog = true;
     #endif
 
     while (true) {
@@ -441,8 +442,24 @@ namespace IMUTaskManager {
         logPayload.is_motionless = (abs(data.resultant_acc - 1.0) < MOTIONLESS_ACC_THRESHOLD && 
                                     data.resultant_gyro < MOTIONLESS_GYRO_THRESHOLD_DEG_S);
         logPayload.timestamp_ms = millis();
-        xQueueSend(s.imuLoggingQueue, &logPayload, pdMS_TO_TICKS(5)); // send to logging queue
-        xEventGroupSetBits(s.mqttPublishEventGroup, PUBLISH_IMU_LOG_BIT); // signal mqtt task to publish
+        
+        // Only send if queue is initialized
+        if (s.imuLoggingQueue != NULL) {
+          BaseType_t result = xQueueSend(s.imuLoggingQueue, &logPayload, pdMS_TO_TICKS(5));
+          if (result == pdTRUE) {
+            if (firstLog) {
+              Serial.printf("[IMU] First log sent to queue %p\n", s.imuLoggingQueue);
+              Serial.printf("[IMU] Setting event bit 0x%02X on group %p\n", PUBLISH_IMU_LOG_BIT, s.mqttPublishEventGroup);
+              firstLog = false;
+            }
+            xEventGroupSetBits(s.mqttPublishEventGroup, PUBLISH_IMU_LOG_BIT); // signal mqtt task to publish
+          }
+        } else {
+          if (firstLog) {
+            Serial.println("[IMU] ERROR: imuLoggingQueue is NULL!");
+            firstLog = false;
+          }
+        }
         lastLogTime = currentTime;
       }
 

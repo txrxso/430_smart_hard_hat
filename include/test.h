@@ -6,7 +6,7 @@
 // FILE DEFINES MACROS TO ENABLE TESTING AND LOGGING FOR VERIFICATION
 #define MQTT_TOPIC_IMU_DAQ "igen430/shh/imu_test"
 #define ENABLE_IMU_LOGGING 1
-#define DUTY_CYCLE 1 // set to 1 to enable tx_duration measurements for duty cycle calculation
+#define DUTY_CYCLE 0 // set to 1 to enable tx_duration measurements for duty cycle calculation
 
 #if ENABLE_IMU_LOGGING
 struct IMULogPayload { 

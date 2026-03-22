@@ -35,7 +35,7 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 #include <freertos/queue.h>
 
 // define DEBUG mode to print stuff
-#define HEARTBEAT_INTERVAL_MIN 0.5  // set to 5 minutes // in minutes
+#define HEARTBEAT_INTERVAL_MIN 5  // set to 5 minutes // in minutes
 
 // for maintaining connection state
 #if ENABLE_TLS 
@@ -580,25 +580,18 @@ void mqttPublishTask(void * parameter) {
     // Check logging bit independently - lowest priority, can be set with other bits
     #if ENABLE_IMU_LOGGING
     if (bits & PUBLISH_IMU_LOG_BIT) {
-      IMULogPayload imuLogEntryBuffer;
-      if (xQueueReceive(imuState.imuLoggingQueue, &imuLogEntryBuffer, 0) == pdTRUE) {
-        // prepare JSON payload
-        if (serializeIMULog(imuLogEntryBuffer, buffer, sizeof(buffer))) {
-          bool success = mqttClient.publish(MQTT_TOPIC_IMU_DAQ, buffer);
-
-          if (!success) {
+      // Check if queue is initialized before attempting to receive
+      if (imuState.imuLoggingQueue != NULL) {
+        IMULogPayload imuLogEntryBuffer;
+        if (xQueueReceive(imuState.imuLoggingQueue, &imuLogEntryBuffer, 0) == pdTRUE) {
+          if (serializeIMULog(imuLogEntryBuffer, buffer, sizeof(buffer))) {
+            bool success = mqttClient.publish(MQTT_TOPIC_IMU_DAQ, buffer);
             #if MQTT_DEBUG
-            Serial.println("MQTT IMU log publish failed.");
-            #endif
-            // for logging, we can just drop the message if failed to publish since it's not critical data
-          } 
-          else {
-            #if MQTT_DEBUG
-            Serial.println("MQTT IMU log published successfully.");
-            Serial.println(buffer);
+            if (!success) {
+              Serial.println("MQTT IMU log publish failed.");
+            }
             #endif
           }
-        }
         else {
           #if MQTT_DEBUG
           Serial.println("Failed to serialize IMU log payload to JSON.");
@@ -606,6 +599,11 @@ void mqttPublishTask(void * parameter) {
           // skip to next log entry if serialization failed
         }
 
+      } else {
+        Serial.println("[MQTT] Queue empty - no IMU data to receive");
+      }
+      } else {
+        Serial.println("[MQTT] ERROR: imuLoggingQueue is NULL!");
       }
     }
     #endif
@@ -627,10 +625,11 @@ void manualAlertTask(void * parameter) {
 // TASK: IMU Monitoring and Sampling
 void imuTask(void * parameter) {
   IMUTaskManager::State* state = (IMUTaskManager::State*)parameter;
-  IMUTaskManager::init(*state, imuQueue, gpsQueue, alertPublishQueue, mqttPublishEventGroup, gpsEventGroup);
+  IMUTaskManager::init(*state, imuQueue, gpsQueue, alertPublishQueue, gpsEventGroup, mqttPublishEventGroup);
   #if ENABLE_IMU_LOGGING
   QueueHandle_t imuLoggingQueue = xQueueCreate(50, sizeof(IMULogPayload)); // create logging queue
   state->imuLoggingQueue = imuLoggingQueue; // set pointer in state so can be used within imu.cpp
+  Serial.printf("[IMU] imuLoggingQueue created: %p\n", imuLoggingQueue);
   #endif
 
   IMUTaskManager::run(*state);
