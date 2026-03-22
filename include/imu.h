@@ -21,7 +21,7 @@
 // state machine thresholds 
 #define MEDIUM_IMPACT_THRESHOLD_G 4.0
 #define FREEFALL_THRESHOLD_G 0.3
-#define JERK_THRESHOLD_G_PER_S 65.0 // TODO: REPLACE WITH ACTUAL VALUE FROM TEST DATA
+#define JERK_THRESHOLD_G_PER_S 15.0 //  65.0 // TODO: REPLACE WITH ACTUAL VALUE FROM TEST DATA // 12.0
 #define MOTIONLESS_ACC_THRESHOLD 0.3 
 
 // timing constraints 
@@ -41,22 +41,22 @@
 // OUTPUT OF IMU ANALYSIS (PUBLIC)
 // ============================================
 enum class SafetyEvent {  // what is returned to send alert
-  NONE,
-  FALL,
-  DIRECT_IMPACT, // sudden impact without freefall
-  HEAVY_IMPACT, // very high acceleration, immediate alert 
+  NONE, // 0
+  FALL, // 1
+  DIRECT_IMPACT, // 2 - sudden impact without freefall
+  HEAVY_IMPACT, // 3 - very high acceleration, immediate alert 
 };
 
 // ============================================
 // STATE MACHINE STATES (INTERNAL)
 // ============================================
 enum class InternalSafetyState { 
-  NORMAL,
-  FREEFALL,
-  IMPACT,
-  POST_IMPACT,
-  INJURY_LIKELY,
-  RECOVERED
+  NORMAL, // 0 
+  FREEFALL, // 1
+  IMPACT, // 2 
+  POST_IMPACT, // 3
+  INJURY_LIKELY, // 4 
+  RECOVERED // 5
 };
 
 

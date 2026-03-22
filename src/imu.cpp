@@ -143,8 +143,8 @@ namespace IMUTaskManager {
     float jerk2 = getJerk(d.prev2ResultantAcc, d.prevResultantAcc, dt2);
     float jerk3 = getJerk(d.prev3ResultantAcc, d.prev2ResultantAcc, dt3);
 
-    float smoothedJerk = (abs(jerk1) + abs(jerk2) + abs(jerk3)) / 3.0;
-    return smoothedJerk;
+    float peakJerk = max(max(abs(jerk1), abs(jerk2)), abs(jerk3));
+    return peakJerk;
   }
   
   // Check if person is lying horizontally (gravity in x-y plane, not z)
@@ -274,6 +274,12 @@ namespace IMUTaskManager {
                         data.resultant_gyro, data.resultant_acc);
           #endif
         }
+
+        else if (jerk > JERK_THRESHOLD_G_PER_S) {  // higher threshold for jerk-only
+          d.impactStartTime = currentTime;
+          d.detectedEvent = SafetyEvent::DIRECT_IMPACT;
+          d.currentState = InternalSafetyState::IMPACT;
+      }
         
         break;
       }
