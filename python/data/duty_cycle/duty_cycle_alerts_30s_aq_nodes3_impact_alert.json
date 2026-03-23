@@ -1,0 +1,47 @@
+{
+  "scenario": "alerts_30s",
+  "num_nodes": 3,
+  "test_duration_s": 1800.5027039051056,
+  "total_events": 18185,
+  "total_tx_time_us": 27405651,
+  "total_tx_time_s": 27.405651,
+  "duty_cycle_pct": 1.522111071566844,
+  "success_stats": {
+    "count": 18185,
+    "duration_us": 27405651,
+    "duration_s": 27.405651,
+    "duty_cycle_pct": 1.522111071566844
+  },
+  "failed_stats": {
+    "count": 0,
+    "duration_us": 0,
+    "duration_s": 0.0,
+    "duty_cycle_pct": 0.0
+  },
+  "events_by_type": {
+    "Alert": {
+      "count": 18179,
+      "success_count": 18179,
+      "success_duration_us": 27394057,
+      "failed_count": 0,
+      "failed_duration_us": 0,
+      "total_duration_us": 27394057,
+      "avg_duration_ms": 1.5069067055393586,
+      "min_duration_ms": 1.162,
+      "max_duration_ms": 118.821,
+      "duty_cycle_pct": 1.521467140292825
+    },
+    "Heartbeat": {
+      "count": 6,
+      "success_count": 6,
+      "success_duration_us": 11594,
+      "failed_count": 0,
+      "failed_duration_us": 0,
+      "total_duration_us": 11594,
+      "avg_duration_ms": 1.9323333333333332,
+      "min_duration_ms": 1.446,
+      "max_duration_ms": 2.147,
+      "duty_cycle_pct": 0.0006439312740188506
+    }
+  }
+}

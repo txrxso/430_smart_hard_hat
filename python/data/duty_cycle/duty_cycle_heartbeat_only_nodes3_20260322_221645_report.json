@@ -1,0 +1,35 @@
+{
+  "scenario": "heartbeat_only",
+  "num_nodes": 3,
+  "test_duration_s": 900.0037851333618,
+  "total_events": 3,
+  "total_tx_time_us": 6683,
+  "total_tx_time_s": 0.006683,
+  "duty_cycle_pct": 0.0007425524326000161,
+  "success_stats": {
+    "count": 3,
+    "duration_us": 6683,
+    "duration_s": 0.006683,
+    "duty_cycle_pct": 0.0007425524326000161
+  },
+  "failed_stats": {
+    "count": 0,
+    "duration_us": 0,
+    "duration_s": 0.0,
+    "duty_cycle_pct": 0.0
+  },
+  "events_by_type": {
+    "Heartbeat": {
+      "count": 3,
+      "success_count": 3,
+      "success_duration_us": 6683,
+      "failed_count": 0,
+      "failed_duration_us": 0,
+      "total_duration_us": 6683,
+      "avg_duration_ms": 2.2276666666666665,
+      "min_duration_ms": 2.15,
+      "max_duration_ms": 2.332,
+      "duty_cycle_pct": 0.0007425524326000161
+    }
+  }
+}
