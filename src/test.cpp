@@ -4,6 +4,7 @@
 QueueHandle_t dutyCycleQueue = NULL; // actual definition
 #endif
 
+#if ENABLE_IMU_LOGGING
 bool serializeIMULog(const IMULogPayload& log, char* buffer, size_t bufferSize) {
   int len = snprintf(buffer, bufferSize,
     "{\"ts\":%lu,\"ax\":%.3f,\"ay\":%.3f,\"az\":%.3f,\"gx\":%.1f,\"gy\":%.1f,\"gz\":%.1f,"
@@ -19,3 +20,5 @@ bool serializeIMULog(const IMULogPayload& log, char* buffer, size_t bufferSize) 
     log.is_motionless ? 1 : 0);
   return (len < bufferSize);
 }
+
+#endif
