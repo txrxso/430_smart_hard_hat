@@ -1,0 +1,47 @@
+{
+  "scenario": "alerts_5min",
+  "num_nodes": 3,
+  "test_duration_s": 1385.6976308822632,
+  "total_events": 13,
+  "total_tx_time_us": 27093,
+  "total_tx_time_s": 0.027093,
+  "duty_cycle_pct": 0.001955188447767648,
+  "success_stats": {
+    "count": 13,
+    "duration_us": 27093,
+    "duration_s": 0.027093,
+    "duty_cycle_pct": 0.001955188447767648
+  },
+  "failed_stats": {
+    "count": 0,
+    "duration_us": 0,
+    "duration_s": 0.0,
+    "duty_cycle_pct": 0.0
+  },
+  "events_by_type": {
+    "Alert": {
+      "count": 8,
+      "success_count": 8,
+      "success_duration_us": 16649,
+      "failed_count": 0,
+      "failed_duration_us": 0,
+      "total_duration_us": 16649,
+      "avg_duration_ms": 2.081125,
+      "min_duration_ms": 2.022,
+      "max_duration_ms": 2.121,
+      "duty_cycle_pct": 0.0012014886674374776
+    },
+    "Heartbeat": {
+      "count": 5,
+      "success_count": 5,
+      "success_duration_us": 10444,
+      "failed_count": 0,
+      "failed_duration_us": 0,
+      "total_duration_us": 10444,
+      "avg_duration_ms": 2.0888,
+      "min_duration_ms": 1.716,
+      "max_duration_ms": 2.338,
+      "duty_cycle_pct": 0.0007536997803301708
+    }
+  }
+}
