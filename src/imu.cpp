@@ -277,11 +277,8 @@ namespace IMUTaskManager {
           #endif
         }
 
-        else if (jerk > JERK_THRESHOLD_G_PER_S) {  // higher threshold for jerk-only
-          d.impactStartTime = currentTime;
-          d.detectedEvent = SafetyEvent::DIRECT_IMPACT;
-          d.currentState = InternalSafetyState::IMPACT;
-      }
+        // Path D: REMOVED jerk-only detection (too prone to false positives from vibrations/shaking)
+        // Jerk must now be combined with impact threshold (Path B) for validation
         
         break;
       }

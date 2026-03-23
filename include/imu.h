@@ -20,9 +20,9 @@
 #define SEVERE_IMPACT_THRESHOLD_G 8.0
 
 // state machine thresholds 
-#define MEDIUM_IMPACT_THRESHOLD_G 4.0
+#define MEDIUM_IMPACT_THRESHOLD_G 4.0 
 #define FREEFALL_THRESHOLD_G 0.3
-#define JERK_THRESHOLD_G_PER_S 15.0 //  65.0 // TODO: REPLACE WITH ACTUAL VALUE FROM TEST DATA // 12.0
+#define JERK_THRESHOLD_G_PER_S 30.0  // Increased from 15.0 - hand shaking produces ~15-20 g/s
 #define MOTIONLESS_ACC_THRESHOLD 0.3 
 
 // timing constraints 
