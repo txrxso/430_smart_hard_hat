@@ -169,7 +169,8 @@ void init(State& s,
           QueueHandle_t peripheralCanOutgoingQueue,
           EventGroupHandle_t gpsEventGroup,
           EventGroupHandle_t mqttPublishEventGroup,
-          IMUTaskManager::State* imuState) {
+          IMUTaskManager::State* imuState,
+          VibeManager::State* vibeState) {
     
     // Initialize manual alert state
     s.manualAlertActive = false;
@@ -183,6 +184,7 @@ void init(State& s,
     s.gpsEventGroup = gpsEventGroup;
     s.mqttPublishEventGroup = mqttPublishEventGroup;
     s.imuState = imuState;
+    s.vibeState = vibeState;
     
     #if BUTTON_DEBUG
     Serial.println("[MANUAL_ALERT] Task manager initialized");
@@ -268,6 +270,11 @@ void run(State& s) {
                     // signal MQTT publish for manual alert
                     xEventGroupSetBits(s.mqttPublishEventGroup, PUBLISH_MANUAL_ALERT_BIT);
                     
+                    // Start vibration pattern for manual alert
+                    if (s.vibeState) {
+                        VibeManager::startPattern(*s.vibeState, VibePattern::MANUAL_ALERT);
+                    }
+                    
                     #if BUTTON_DEBUG
                     Serial.println("[MANUAL_ALERT] First alert queued for MQTT publish");
                     #endif
@@ -322,6 +329,12 @@ void run(State& s) {
             // Clear manual alert state if active
             if (s.manualAlertActive) {
                 clearManualAlertActive(s);
+                
+                // Stop vibration pattern
+                if (s.vibeState) {
+                    VibeManager::stopPattern(*s.vibeState);
+                }
+                
                 #if BUTTON_DEBUG
                 Serial.println("[MANUAL_ALERT] Manual alert cleared via button hold");
                 #endif
@@ -380,6 +393,11 @@ void run(State& s) {
                 Serial.println("[MQTT] Manual clear alert FAILED to queue");
                 #endif
             }
+        }
+
+        // Update vibration motor patterns (non-blocking)
+        if (s.vibeState) {
+            VibeManager::update(*s.vibeState);
         }
 
         // check every 20 ms (task delay)

@@ -33,7 +33,8 @@ namespace IMUTaskManager {
     QueueHandle_t gpsQueue, 
     QueueHandle_t alertPublishQueue, 
     EventGroupHandle_t gpsEventGroup,
-    EventGroupHandle_t mqttPublishEventGroup) {
+    EventGroupHandle_t mqttPublishEventGroup,
+    VibeManager::State* vibeState) {
       s.fallActive = false; // init fall state to false
       memset(&s.originalFallAlert, 0, sizeof(AlertPayload));
       memset(&s.latestIMU, 0, sizeof(imuData));
@@ -43,6 +44,7 @@ namespace IMUTaskManager {
       s.alertPublishQueue = alertPublishQueue;
       s.gpsEventGroup = gpsEventGroup;
       s.mqttPublishEventGroup = mqttPublishEventGroup;
+      s.vibeState = vibeState;
 
       #if ENABLE_IMU_LOGGING
       s.imuLoggingQueue = NULL; // will be set from main.cpp
@@ -480,6 +482,11 @@ namespace IMUTaskManager {
         
         setFallDetected(s, alertToSend);
         sendAlert(s, alertToSend);
+        
+        // Trigger vibration pattern for fall/impact
+        if (s.vibeState) {
+          VibeManager::startPattern(*s.vibeState, VibePattern::FALL_IMPACT);
+        }
       }
 
       // keep sending if fall active 

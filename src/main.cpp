@@ -22,6 +22,7 @@ Acts as interface between MQTT broker via Wifi and peripheral modules via CAN bu
 #include "button.h"
 #include "can.h"
 #include "debug.h"
+#include "vibe.h"
 #include "certs.h"
 
 // Wifi Configuration
@@ -53,6 +54,7 @@ struct {
 GPSTaskManager::State gpsState = {}; // global state for GPS task manager
 IMUTaskManager::State imuState = {}; // global state for IMU task manager
 ManualAlertTaskManager::State manualAlertState = {}; // global state for manual alert task manager
+VibeManager::State vibeState = {}; // global state for vibration motor
 PubSubClient mqttClient(wifiClient);
 
 TaskHandle_t imuTaskHandle = NULL;
@@ -313,6 +315,13 @@ void incomingCanTask(void * parameter) {
             
               // signal event group
               xEventGroupSetBits(mqttPublishEventGroup, PUBLISH_CAN_ALERT_BIT);
+              
+              // Trigger vibration pattern based on alert type
+              if (nodeId == NODE_NOISE) {
+                VibeManager::startPattern(vibeState, VibePattern::NOISE_ALERT);
+              } else if (nodeId == NODE_AIR_Q) {
+                VibeManager::startPattern(vibeState, VibePattern::AIR_QUALITY_ALERT);
+              }
             }
           } else {
             #if CAN_DEBUG
@@ -618,14 +627,14 @@ void mqttPublishTask(void * parameter) {
 void manualAlertTask(void * parameter) {
   ManualAlertTaskManager::State* state = (ManualAlertTaskManager::State*)parameter;
   ManualAlertTaskManager::init(*state, alertPublishQueue, gpsQueue, peripheralCanOutgoingQueue, 
-                                gpsEventGroup, mqttPublishEventGroup, &imuState);
+                                gpsEventGroup, mqttPublishEventGroup, &imuState, &vibeState);
   ManualAlertTaskManager::run(*state);
 }
 
 // TASK: IMU Monitoring and Sampling
 void imuTask(void * parameter) {
   IMUTaskManager::State* state = (IMUTaskManager::State*)parameter;
-  IMUTaskManager::init(*state, imuQueue, gpsQueue, alertPublishQueue, gpsEventGroup, mqttPublishEventGroup);
+  IMUTaskManager::init(*state, imuQueue, gpsQueue, alertPublishQueue, gpsEventGroup, mqttPublishEventGroup, &vibeState);
   #if ENABLE_IMU_LOGGING
   QueueHandle_t imuLoggingQueue = xQueueCreate(50, sizeof(IMULogPayload)); // create logging queue
   state->imuLoggingQueue = imuLoggingQueue; // set pointer in state so can be used within imu.cpp
@@ -661,6 +670,7 @@ void setup(void) {
   // hardware setup
   setupGPS();
   buttonInit();
+  VibeManager::init(vibeState); // Initialize vibration motor
 
   // initialize CAN
   while (!initCAN()) {

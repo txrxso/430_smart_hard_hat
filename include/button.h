@@ -16,6 +16,7 @@
 #include <driver/twai.h>
 #include "data.h" // for AlertPayload
 #include "imu.h" // for IMUTaskManager::State
+#include "vibe.h" // for VibeManager::State
 
 // Low-level button functions (ISR and hardware)
 void buttonInit(); 
@@ -43,6 +44,7 @@ namespace ManualAlertTaskManager {
         EventGroupHandle_t gpsEventGroup;
         EventGroupHandle_t mqttPublishEventGroup;
         IMUTaskManager::State* imuState; // pointer to IMU state for fall detection clearing
+        VibeManager::State* vibeState; // pointer to vibe state for haptic feedback
     };
     
     // Public API
@@ -52,7 +54,8 @@ namespace ManualAlertTaskManager {
               QueueHandle_t peripheralCanOutgoingQueue,
               EventGroupHandle_t gpsEventGroup,
               EventGroupHandle_t mqttPublishEventGroup,
-              IMUTaskManager::State* imuState);
+              IMUTaskManager::State* imuState,
+              VibeManager::State* vibeState);
     
     void run(State& s); // main loop (never returns)
     

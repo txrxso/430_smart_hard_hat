@@ -11,6 +11,7 @@
 #include "data.h"
 #include "debug.h"
 #include "test.h"
+#include "vibe.h"
 
 // ============================================
 // THRESHOLDS AND PARAMETERS FOR IMU ANALYSIS
@@ -115,6 +116,7 @@ namespace IMUTaskManager {
     QueueHandle_t alertPublishQueue; // already a pointer
     EventGroupHandle_t mqttPublishEventGroup;
     EventGroupHandle_t gpsEventGroup;
+    VibeManager::State* vibeState; // pointer to vibe state for haptic feedback
 
     #if ENABLE_IMU_LOGGING
     QueueHandle_t imuLoggingQueue; // for logging raw IMU data and events for offline analysis
@@ -128,7 +130,8 @@ namespace IMUTaskManager {
     QueueHandle_t gpsQueue, 
     QueueHandle_t alertPublishQueue, 
     EventGroupHandle_t mqttPublishEventGroup, 
-    EventGroupHandle_t gpsEventGroup);
+    EventGroupHandle_t gpsEventGroup,
+    VibeManager::State* vibeState);
 
   void run(State& s); // main loop for IMU task, never returns
 
