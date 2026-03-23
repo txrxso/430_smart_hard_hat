@@ -148,6 +148,7 @@ bool isCancelActive() {
 void resetCancelTimer() {
     cancelActive = true;
     cancelTimerStart = millis();
+    pressCount = 0; // clear any pending single presses to prevent stale double-press detection
 }
 
 // get ISR counter for debugging
@@ -172,6 +173,7 @@ void init(State& s,
     
     // Initialize manual alert state
     s.manualAlertActive = false;
+    s.pendingAlertRequest = false;
     memset(&s.originalManualAlert, 0, sizeof(AlertPayload));
     
     // Store dependencies
@@ -212,6 +214,33 @@ void run(State& s) {
         }
         #endif
         
+        // Check if cancel window just expired and we have a pending alert request
+        if (!isCancelActive() && s.pendingAlertRequest) {
+            #if BUTTON_DEBUG
+            Serial.println("[MANUAL_ALERT] Processing pending alert after cancel window expired");
+            #endif
+            
+            s.pendingAlertRequest = false; // clear pending flag
+            
+            // Create and queue manual alert payload with current GPS
+            AlertPayload manualAlertPayload;
+            memset(&manualAlertPayload, 0, sizeof(manualAlertPayload));
+            manualAlertPayload.event = MANUAL_ALERT;
+            manualAlertPayload.fall_detection = 2;
+            attachGPSToAlert(manualAlertPayload, s.gpsEventGroup, s.gpsQueue);
+            
+            // Store this as the original manual alert for continuous streaming
+            s.manualAlertActive = true;
+            s.originalManualAlert = manualAlertPayload;
+            
+            if (xQueueSend(s.alertPublishQueue, &manualAlertPayload, pdMS_TO_TICKS(5)) == pdTRUE) {
+                xEventGroupSetBits(s.mqttPublishEventGroup, PUBLISH_MANUAL_ALERT_BIT);
+                #if BUTTON_DEBUG
+                Serial.println("[MANUAL_ALERT] Pending alert sent successfully");
+                #endif
+            }
+        }
+        
         // check for NEW manual alert (double press)
         if (isButtonDoublePressed()) { 
             #if BUTTON_DEBUG
@@ -250,9 +279,15 @@ void run(State& s) {
             } else {
                 #if BUTTON_DEBUG
                 if (isCancelActive()) {
-                    Serial.println("[MANUAL_ALERT] BLOCKED - cancel timer active");
+                    Serial.println("[MANUAL_ALERT] BLOCKED - cancel timer active, queuing for later");
+                    s.pendingAlertRequest = true; // queue alert for when cancel expires
                 } else {
                     Serial.println("[MANUAL_ALERT] Already active - ignoring duplicate double-press");
+                }
+                #else
+                // Set pending flag if cancel is active
+                if (isCancelActive()) {
+                    s.pendingAlertRequest = true;
                 }
                 #endif
             }
@@ -291,6 +326,9 @@ void run(State& s) {
                 Serial.println("[MANUAL_ALERT] Manual alert cleared via button hold");
                 #endif
             }
+            
+            // Clear any pending alert request (user intentionally cleared)
+            s.pendingAlertRequest = false;
             
             // Clear fall detection state if active
             if (s.imuState && IMUTaskManager::isFallActive(*s.imuState)) {

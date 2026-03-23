@@ -34,6 +34,7 @@ namespace ManualAlertTaskManager {
         // Manual alert continuous streaming state
         bool manualAlertActive;
         AlertPayload originalManualAlert; // stored GPS location/timestamp from first detection
+        bool pendingAlertRequest; // true if double-press occurred during cancel window
         
         // Dependencies - pointers to avoid copies
         QueueHandle_t alertPublishQueue;
