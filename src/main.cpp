@@ -661,10 +661,7 @@ void setup(void) {
     delay(10); 
 
   if (!setupIMU()) {
-    while (1) {
-      Serial.println("IMU setup failed. Stopping.");
-      delay(10);
-    }
+    delay(20);
   }
 
   // hardware setup
