@@ -175,6 +175,7 @@ void init(State& s,
     // Initialize manual alert state
     s.manualAlertActive = false;
     s.pendingAlertRequest = false;
+    s.lastAlertSendTime = 0;
     memset(&s.originalManualAlert, 0, sizeof(AlertPayload));
     
     // Store dependencies
@@ -234,6 +235,7 @@ void run(State& s) {
             // Store this as the original manual alert for continuous streaming
             s.manualAlertActive = true;
             s.originalManualAlert = manualAlertPayload;
+            s.lastAlertSendTime = millis(); // initialize send timestamp
             
             if (xQueueSend(s.alertPublishQueue, &manualAlertPayload, pdMS_TO_TICKS(5)) == pdTRUE) {
                 xEventGroupSetBits(s.mqttPublishEventGroup, PUBLISH_MANUAL_ALERT_BIT);
@@ -261,6 +263,7 @@ void run(State& s) {
                 // Store this as the original manual alert for continuous streaming
                 s.manualAlertActive = true;
                 s.originalManualAlert = manualAlertPayload;
+                s.lastAlertSendTime = millis(); // initialize send timestamp
                 
                 #if BUTTON_DEBUG
                 Serial.println("[MANUAL_ALERT] State activated - continuous streaming started");
@@ -302,21 +305,22 @@ void run(State& s) {
 
         // CONTINUOUS manual alert streaming (if active and not cancelled)
         if (s.manualAlertActive && !isCancelActive()) {
-            // Resend alert with original GPS location and timestamp
-            AlertPayload manualAlertResend;
-            manualAlertResend = s.originalManualAlert; // use stored GPS data
+            unsigned long currentTime = millis();
             
-            if (xQueueSend(s.alertPublishQueue, &manualAlertResend, pdMS_TO_TICKS(5)) == pdTRUE) {
-                xEventGroupSetBits(s.mqttPublishEventGroup, PUBLISH_MANUAL_ALERT_BIT);
+            // Only resend every 1 second
+            if (currentTime - s.lastAlertSendTime >= 1000) {
+                // Resend alert with original GPS location and timestamp
+                AlertPayload manualAlertResend;
+                manualAlertResend = s.originalManualAlert; // use stored GPS data
                 
-                #if BUTTON_DEBUG
-                // Less frequent logging to avoid spam
-                static unsigned long lastStreamLog = 0;
-                if (millis() - lastStreamLog > 5000) {
-                    Serial.println("[MANUAL_ALERT] Continuous stream sent (original GPS)");
-                    lastStreamLog = millis();
+                if (xQueueSend(s.alertPublishQueue, &manualAlertResend, pdMS_TO_TICKS(5)) == pdTRUE) {
+                    xEventGroupSetBits(s.mqttPublishEventGroup, PUBLISH_MANUAL_ALERT_BIT);
+                    s.lastAlertSendTime = currentTime; // update last send time
+                    
+                    #if BUTTON_DEBUG
+                    Serial.println("[MANUAL_ALERT] Alert resent (1s interval)");
+                    #endif
                 }
-                #endif
             }
         }
 
@@ -414,6 +418,7 @@ bool isManualAlertActive(State& s) {
 void clearManualAlertActive(State& s) {
     if (s.manualAlertActive) {
         s.manualAlertActive = false;
+        s.lastAlertSendTime = 0; // reset timer
         memset(&s.originalManualAlert, 0, sizeof(s.originalManualAlert));
         
         #if BUTTON_DEBUG

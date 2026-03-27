@@ -36,6 +36,7 @@ namespace IMUTaskManager {
     EventGroupHandle_t mqttPublishEventGroup,
     VibeManager::State* vibeState) {
       s.fallActive = false; // init fall state to false
+      s.lastAlertSendTime = 0; // initialize alert send timestamp
       memset(&s.originalFallAlert, 0, sizeof(AlertPayload));
       memset(&s.latestIMU, 0, sizeof(imuData));
 
@@ -479,6 +480,7 @@ namespace IMUTaskManager {
         
         setFallDetected(s, alertToSend);
         sendAlert(s, alertToSend);
+        s.lastAlertSendTime = millis(); // initialize send timestamp
         
         // Trigger vibration pattern for fall/impact
         if (s.vibeState) {
@@ -486,16 +488,21 @@ namespace IMUTaskManager {
         }
       }
 
-      // keep sending if fall active 
-      else if (s.fallActive && !isCancelActive()) { 
-        AlertPayload alertToResend;
-        alertToResend.event = FALL_IMPACT;
-        getOriginalFallGPSData(s, alertToResend); // get original GPS data from when fall was first detected
-        alertToResend.fall_detection = 1;
-        alertToResend.noise_db = 0.0;
+      // keep sending if fall active (every 1 second)
+      else if (s.fallActive && !isCancelActive()) {
+        unsigned long currentTime = millis();
+        
+        // Only resend every 1 second
+        if (currentTime - s.lastAlertSendTime >= 1000) {
+          AlertPayload alertToResend;
+          alertToResend.event = FALL_IMPACT;
+          getOriginalFallGPSData(s, alertToResend); // get original GPS data from when fall was first detected
+          alertToResend.fall_detection = 1;
+          alertToResend.noise_db = 0.0;
 
-        sendAlert(s, alertToResend);
-
+          sendAlert(s, alertToResend);
+          s.lastAlertSendTime = currentTime; // update last send time
+        }
       }
       #endif 
 
@@ -510,6 +517,7 @@ namespace IMUTaskManager {
 
   void clearFallActive(State& s){
     s.fallActive = false;
+    s.lastAlertSendTime = 0; // reset timer
     memset(&s.originalFallAlert, 0, sizeof(AlertPayload)); // clear original fall alert data
     s.detectionState.currentState = InternalSafetyState::NORMAL;
     s.detectionState.detectedEvent = SafetyEvent::NONE;

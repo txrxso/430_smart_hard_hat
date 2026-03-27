@@ -36,6 +36,7 @@ namespace ManualAlertTaskManager {
         bool manualAlertActive;
         AlertPayload originalManualAlert; // stored GPS location/timestamp from first detection
         bool pendingAlertRequest; // true if double-press occurred during cancel window
+        unsigned long lastAlertSendTime; // timestamp of last alert send for 1-second interval
         
         // Dependencies - pointers to avoid copies
         QueueHandle_t alertPublishQueue;

@@ -100,6 +100,7 @@ namespace IMUTaskManager {
   struct State { 
     bool fallActive; 
     AlertPayload originalFallAlert; // keep track of last alert payload to resend if still active
+    unsigned long lastAlertSendTime; // timestamp of last alert send for 1-second interval
 
     // detection state 
     InternalDetectionState detectionState;
