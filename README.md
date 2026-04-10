@@ -1,5 +1,16 @@
-# 430_gateway_node
+# Smart Hard Hat Gateway Firmware
+Firmware for gateway module ESP32 responsible for the following on the smart hard hat: 
+- telemetry via MQTT (heartbeats, alert events)
+- CAN communication (RTR for heartbeats and receiving alerts from other nodes on the bus such as noise and air quality)
+- sampling of the IMU sensor to continuously monitor for falls/impacts
+- sampling to of the GPS module to continuously update geolocation coordinates and sync datetime
 
+# Installation & Usage
+```
+# Clone the repository
+git clone https://github.com/txrxso/430_smart_hard_hat.git
+```
+##  Configuration
 ## Debug modes 
 Change the following flags in `include/debug.h` : 
 
@@ -36,7 +47,7 @@ Change the following flags in `include/debug.h` :
 #endif 
 ```
 
-### Add Root CA Cert if Using HiveMQ Private Cloud Broker
+## Add Root CA Cert if Using HiveMQ Private Cloud Broker
 To connect to `fe26426fbe64463790fc2792777c8189.s1.eu.hivemq.cloud` on port `8883` (TLS only), we need to set the Root CA certificate.
 
 1. In bash, run `touch include/certs.h`.
@@ -55,3 +66,8 @@ const char* root_ca = <PASTE CERTIFICATE HERE>;
 For how to get the certificate for the broker on HIVE MQ cloud, refer to `docs/certificates`.
 
 3.  In `main.cpp`, set `#define ENABLE_TLS 1`.
+
+## Usage 
+1. Connect the ESP32 to the peripherals.
+2. Connect ESP32 to host with cloned repository. Ensure that the host can detect the right COM port to the ESP32. 
+3. With PlatformIO extension in VS code, run `pio run --target upload`.
