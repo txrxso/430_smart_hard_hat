@@ -70,7 +70,7 @@ Right now:
 
 - Backend will receive UTC DateTime
 
-### 3.1 GPS Time Syncing (Timestamping Fallback)
+### 3.1 GPS Time Syncing (Timestamping Fallback) [DONE]
 - Want to improve from current design right now, where only depends on the datetime in `gpsQueue`
 - Main constraint: GPS module has 1 second granularity, so if we query at T+0.2 vs. T+0.7 seconds, it returns the same datetime string even if 500 ms elapsed.
 
@@ -129,7 +129,7 @@ Other approaches we could consider:
 ### 6.1 Key Updates [DONE]
 Replace `acc` and `gyro` keys as `fall_detection` : 0 or 1.
 
-### 6.2 Continuous Alert Stream Unless Cancelled for Falls 
+### 6.2 Continuous Alert Stream Unless Cancelled for Falls [DONE]
 Double check that once fall is detected, always continues to send fall_detection = 1 with original timestamp until false positive button is pressed, then return state back to 0.
 
 ## 7. Documentation <a name="docs"></a>
@@ -140,7 +140,7 @@ Add a FSM diagram for firmware states.
 
 
 ## 8. Testing 
-### 8.1 Duty Cycle Verification: esp_timer to estimate tx_duration 
+### 8.1 Duty Cycle Verification: esp_timer to estimate tx_duration [DONE]
 Components: 
 - Need to add script to log via serial & check while subscribed to MQTT topic, that message was received 
     - Need to separate diff. tx_durations for Alert (and also alert types) and Heartbeat Payloads
